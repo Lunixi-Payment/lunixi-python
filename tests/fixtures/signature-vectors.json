@@ -1,0 +1,77 @@
+{
+  "_comment": "Ed25519 signing vectors for the Lunixi Python SDK suite. The key is a SYNTHETIC test seed (bytes 0x00..0x1f) generated for these tests only; it is not a credential and grants no access to anything.",
+  "seedHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f\n-----END PRIVATE KEY-----\n",
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAA6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=\n-----END PUBLIC KEY-----\n",
+  "pkcs8DerBase64": "MC4CAQAwBQYDK2VwBCIEIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f",
+  "seedBase64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+  "seedAndPublicHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+  "cases": [
+    {
+      "name": "token-exchange-no-body",
+      "method": "POST",
+      "url": "/api/v1/auth/token",
+      "date": "2026-10-11T08:30:00Z",
+      "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "body": null,
+      "digest": null,
+      "canonical": "POST\n/api/v1/auth/token\nX-Date:2026-10-11T08:30:00Z\nX-Nonce:0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "signature": "xVyT3RjS+cBhuC5fE+1bOMZnZaMHj1rX9GszV9YEEmzcJEDsIDeawLtmWBYOH2D4vlwIUca8I9bfLUJigWOpBQ=="
+    },
+    {
+      "name": "event-ingest-compact-body",
+      "method": "POST",
+      "url": "/api/v1/fraud/events/transactions",
+      "date": "2026-10-11T08:30:00Z",
+      "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "body": "{\"eventId\":\"evt-1\",\"eventType\":\"card_sale\",\"subjectType\":\"customer\",\"occurredAt\":\"2026-10-11T08:29:00Z\"}",
+      "digest": "SHA-256=JjTCzzjkh39O8d+J0awhoq26zagLU+99Qzj1vMEvWUM=",
+      "canonical": "POST\n/api/v1/fraud/events/transactions\nX-Date:2026-10-11T08:30:00Z\nX-Nonce:0f1e2d3c4b5a69788796a5b4c3d2e1f0\nDigest:SHA-256=JjTCzzjkh39O8d+J0awhoq26zagLU+99Qzj1vMEvWUM=",
+      "signature": "TQR7DqyBg9YSiUQYHNinHOWerP1x8q+WsTrcmVrMw81ktkcOSr6iZ+13IklrshdWKEd4N/iLmFKdCt4oEeJYCA=="
+    },
+    {
+      "name": "event-ingest-spaced-body-is-a-different-digest",
+      "method": "POST",
+      "url": "/api/v1/fraud/events/transactions",
+      "date": "2026-10-11T08:30:00Z",
+      "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "body": "{\"eventId\": \"evt-1\", \"eventType\": \"card_sale\", \"subjectType\": \"customer\", \"occurredAt\": \"2026-10-11T08:29:00Z\"}",
+      "digest": "SHA-256=mLoaqVyHo8gn8g8rcWHtrxSsZMWKVWUnvoU15yhfDl0=",
+      "canonical": "POST\n/api/v1/fraud/events/transactions\nX-Date:2026-10-11T08:30:00Z\nX-Nonce:0f1e2d3c4b5a69788796a5b4c3d2e1f0\nDigest:SHA-256=mLoaqVyHo8gn8g8rcWHtrxSsZMWKVWUnvoU15yhfDl0=",
+      "signature": "WZIUEWUwvvxcawtG0OMhOKHPCfoUu2zbWEw9/1FmUwja3fx06bhFdzfkw9hhdH1XsZjkcTTk/wB1A1fdvd4BDw=="
+    },
+    {
+      "name": "unicode-body-digest-over-utf8-bytes",
+      "method": "POST",
+      "url": "/api/v1/fraud/decisions/evaluate",
+      "date": "2026-10-11T08:30:00Z",
+      "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "body": "{\"customer\":{\"name\":\"Şükrü Öztürk\"}}",
+      "digest": "SHA-256=3TTC8D5mg7C/VIKdYLcC+UnMv7k4cwd9q5u7O4pZcmk=",
+      "canonical": "POST\n/api/v1/fraud/decisions/evaluate\nX-Date:2026-10-11T08:30:00Z\nX-Nonce:0f1e2d3c4b5a69788796a5b4c3d2e1f0\nDigest:SHA-256=3TTC8D5mg7C/VIKdYLcC+UnMv7k4cwd9q5u7O4pZcmk=",
+      "signature": "BhrtnGJvOQgbcLFi+qTszzVmZC2KpQX9sghVWbN8zRVl+IPNHw4H0M0dUG5XavxMnEQN7oYo/2/enGnzwZ41DQ=="
+    },
+    {
+      "name": "list-with-query-string-in-signed-url",
+      "method": "GET",
+      "url": "/api/v1/fraud/decision-logs?limit=25&decision=review",
+      "date": "2026-10-11T08:30:00Z",
+      "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "body": null,
+      "digest": null,
+      "canonical": "GET\n/api/v1/fraud/decision-logs?limit=25&decision=review\nX-Date:2026-10-11T08:30:00Z\nX-Nonce:0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "signature": "sKCIy0M2ofFpycYvMusNfXCfsLSSv2iyDO8c1fjBFm+xTYPZnXV3PCNDo6hoGgKp62IESbXTdz+yKJeyCV3zDg=="
+    },
+    {
+      "name": "batch-array-body",
+      "method": "POST",
+      "url": "/api/v1/fraud/events/transactions/batch",
+      "date": "2026-10-11T08:30:00Z",
+      "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "body": "[{\"eventId\":\"evt-1\"},{\"eventId\":\"evt-2\"}]",
+      "digest": "SHA-256=r2/nJu7JbSd1aJOX+N8St7GMZU+LgOnYlj0ooC1dDhQ=",
+      "canonical": "POST\n/api/v1/fraud/events/transactions/batch\nX-Date:2026-10-11T08:30:00Z\nX-Nonce:0f1e2d3c4b5a69788796a5b4c3d2e1f0\nDigest:SHA-256=r2/nJu7JbSd1aJOX+N8St7GMZU+LgOnYlj0ooC1dDhQ=",
+      "signature": "xx5W8E7yUbDQm9p29xwYK/7NkqtmsZU6MZ4Q6tGxg4x8olT0AmcMCWHkKmtNgfCaHRYOJYFZGn0ZLTnNSkR0DA=="
+    }
+  ]
+}

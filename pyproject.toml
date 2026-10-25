@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=77.0"]
+build-backend = "setuptools.build_meta"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SINGLE SOURCE OF TRUTH for the distribution name, the import name and the
+# version. Changing the three values below plus the two matching lines in
+# README.md / README.tr.md is the whole rename: nothing else hard-codes them
+# (`Configuration.user_agent` reads the installed metadata at runtime).
+#
+#   distribution name : lunixi-sdk      → `pip install lunixi-sdk`
+#   import name       : lunixi          → `from lunixi import LunixiClient`
+#   version           : 0.1.0           → first release of this SDK
+#   minimum Python    : 3.9
+# ─────────────────────────────────────────────────────────────────────────────
+[project]
+name = "lunixi-sdk"
+version = "0.1.0"
+description = "Lunixi platform client: Ed25519 request signing, token exchange, envelope decoding and the fraud decision and event API."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Lunixi" }]
+keywords = ["lunixi", "payments", "fraud", "ed25519", "api-client"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+
+# Ed25519 signing is delegated to `cryptography`, the standard primitive
+# provider for Python packages. Hand-written curve arithmetic has no place in a
+# customer SDK: a signing bug is silent and every request fails authentication.
+dependencies = ["cryptography>=3.4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.urls]
+Homepage = "https://lunixi.com"
+Documentation = "https://docs.lunixi.com/sdks/python"
+Source = "https://github.com/Lunixi-Payment/lunixi-python"
+Changelog = "https://github.com/Lunixi-Payment/lunixi-python/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+lunixi = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
