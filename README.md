@@ -27,7 +27,13 @@ Version **0.2.0** adds typed payment APIs and durable checkout orchestration whi
 
 ## Installation
 
-The 0.2.0 source release is available through the repository/tag; a GitHub release does not imply a PyPI publication:
+Version **0.2.0** is published on [PyPI](https://pypi.org/project/lunixi-sdk/0.2.0/):
+
+```sh
+pip install lunixi-sdk==0.2.0
+```
+
+Alternatively, install the same source tag from GitHub:
 
 ```sh
 pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.0"

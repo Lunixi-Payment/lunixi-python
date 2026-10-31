@@ -8,7 +8,13 @@
 
 ## Kurulum ve ödeme
 
-GitHub kaynak etiketi, PyPI yayını yapıldığı anlamına gelmez:
+**0.2.0** sürümü [PyPI’de yayımlandı](https://pypi.org/project/lunixi-sdk/0.2.0/):
+
+```sh
+pip install lunixi-sdk==0.2.0
+```
+
+Alternatif olarak aynı kaynak etiketini GitHub’dan kurabilirsiniz:
 
 ```sh
 pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.0"

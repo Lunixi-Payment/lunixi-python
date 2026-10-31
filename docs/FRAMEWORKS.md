@@ -1,5 +1,7 @@
 # Runnable framework integrations
 
+The SDK **0.2.0** release is available from [PyPI](https://pypi.org/project/lunixi-sdk/0.2.0/) with `pip install lunixi-sdk==0.2.0`. Use the [v0.2.0 source checkout](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.0) for the applications and locked development environment below; framework examples are not separate registry packages.
+
 These are complete source applications around the same SDK/Commerce workflow, not separately published framework plugins. Use the pinned development lock on Python 3.12+ for the verified Django 6.1.2, FastAPI 0.162.0 and Flask 3.1.3 targets. Existing stores should adapt their own authentication/order/fulfillment models; the examples use real persisted sample orders/stock and enforce ownership.
 
 ## Server setup
@@ -7,7 +9,7 @@ These are complete source applications around the same SDK/Commerce workflow, no
 From the repository root:
 
 ```sh
-python 3.12 -m venv .venv
+python3.12 -m venv .venv
 .venv/bin/pip install -r requirements-dev.lock
 .venv/bin/pip install --no-deps -e .
 ```
