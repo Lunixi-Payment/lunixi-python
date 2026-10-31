@@ -2,6 +2,8 @@
 
 Önce [sunucu kurulumu ve temel kurallar](FRAMEWORKS.tr.md) okunmalıdır. Bu, gerçek native testleri olan çalışan kaynak uygulamadır; ayrı paket kaydı iddiası yoktur. `LUNIXI_PUBLIC_ORIGIN` aşağıdaki HTTPS origin/port ile eşleşmelidir. TLS dosyaları operatör tarafından sağlanır; repoda sertifika/özel anahtar yoktur.
 
+**[SDK 0.2.1 PyPI’da yayımlandı](https://pypi.org/project/lunixi-sdk/0.2.1/)**; mevcut uygulamanıza `pip install lunixi-sdk==0.2.1` ile kurabilirsiniz. Bu örnek uygulama için [v0.2.1 kaynak etiketini](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.1) ve ortak kurulumdaki kilitli ortamı kullanın; ayrı bir framework paketi yayımlanmamıştır.
+
 ```sh
 python -m integrations.cli init
 python -m integrations.cli seed --customer-id TRUSTED_CUSTOMER_ID --amount 19.90 --currency TRY

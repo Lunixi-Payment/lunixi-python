@@ -27,7 +27,7 @@ Version **0.2.1** adds typed payment APIs and durable checkout orchestration whi
 
 ## Installation
 
-Source release **0.2.1** contains the updated form/URL contract. Install this exact registry version when available, or use its reviewed source tag below. [0.2.0](https://pypi.org/project/lunixi-sdk/0.2.0/) is the earlier published release:
+**[0.2.1 is published on PyPI](https://pypi.org/project/lunixi-sdk/0.2.1/)** with the updated form/URL contract. Its public wheel and sdist sizes, SHA256 digests and package metadata have been verified against the registry. Install this exact version:
 
 ```sh
 pip install lunixi-sdk==0.2.1

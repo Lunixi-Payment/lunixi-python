@@ -8,7 +8,7 @@
 
 ## Kurulum ve ödeme
 
-**0.2.1** kaynak sürümü güncel form/URL sözleşmesini içerir. Registry sürümü erişilebilir olduğunda tam sürümü kurun; aksi halde aşağıdaki incelenmiş kaynak etiketini kullanın. [0.2.0](https://pypi.org/project/lunixi-sdk/0.2.0/) önceki yayımlanmış sürümdür:
+**[0.2.1 PyPI’da yayımlandı](https://pypi.org/project/lunixi-sdk/0.2.1/)** ve güncel form/URL sözleşmesini içerir. Herkese açık wheel ve sdist dosyalarının boyutları, SHA256 değerleri ve paket kimlikleri registry kaydıyla doğrulandı. Tam sürümü kurun:
 
 ```sh
 pip install lunixi-sdk==0.2.1

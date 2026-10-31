@@ -1,10 +1,12 @@
 # Çalışan framework entegrasyonları
 
-Güncel **0.2.1 kaynak sürümünü** ve kilitli örnek ortamını [v0.2.1 etiketinden](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.1) kullanın. Registry sürümü ayrı doğrulanır; [0.2.0](https://pypi.org/project/lunixi-sdk/0.2.0/) önceki yayımlanmış sürümdür. Framework uygulamaları ayrı paket değildir.
+**[SDK 0.2.1 PyPI’da yayımlandı](https://pypi.org/project/lunixi-sdk/0.2.1/)** ve `pip install lunixi-sdk==0.2.1` ile kurulabilir. Çalışan framework uygulamaları ve kilitli ortamları eşleşen [v0.2.1 kaynak etiketindedir](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.1); ayrı paket değildir ve SDK wheel dosyasına dahil değildir.
 
 Bunlar ayrı paket kayıtları değil, aynı SDK/Commerce çekirdeğini kullanan tam kaynak uygulamalardır. Doğrulanan hedefler Python 3.12 üzerinde Django 6.1.2, FastAPI 0.162.0 ve Flask 3.1.3'tür. Gerçek kullanıcı/sipariş/stok/olay tabloları kullanılır. Mevcut mağazada kendi auth/sipariş/teslim modellerine aynı transaction sözleşmesi uygulanmalıdır.
 
 ```sh
+git clone --branch v0.2.1 --depth 1 https://github.com/Lunixi-Payment/lunixi-python.git
+cd lunixi-python
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements-dev.lock
 .venv/bin/pip install --no-deps -e .
