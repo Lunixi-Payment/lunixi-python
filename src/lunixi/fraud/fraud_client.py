@@ -169,9 +169,7 @@ class FraudDecisionsClient:
                 )
             )
 
-        query = {
-            _LOG_FILTERS[name]: value for name, value in filters.items() if value is not None
-        }
+        query = {_LOG_FILTERS[name]: value for name, value in filters.items() if value is not None}
         return Page(self._api.request("GET", f"{_BASE}/decision-logs", None, query=query))
 
     def get(self, trace_id: str) -> Dict[str, Any]:
@@ -230,7 +228,7 @@ class FraudClient:
                 integration_mode=INTEGRATION_MODE_STANDALONE,
                 channel=Channel.STANDALONE_API,
                 transaction_ref="order-2026-0001",
-                payment={"amount": "149.90", "currency": "TRY"},
+                payment={"amount": 14990, "currency": "TRY"},
             )
 
         Fields use Python names; the camelCase spelling from the API reference

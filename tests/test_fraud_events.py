@@ -6,7 +6,7 @@ import pytest
 
 from lunixi.auth.canonical_request import build_canonical_request, digest_for_body
 from lunixi.auth.ed25519_signer import verify_signature
-from lunixi.errors import ConfigurationError
+from lunixi.errors import ApiError, ConfigurationError
 from lunixi.fraud.fraud_client import EVENT_BATCH_LIMIT
 
 from .support.recording_transport import envelope, json_response, transport_failure
@@ -83,7 +83,7 @@ class TestSingleEvent:
 
     def test_without_an_idempotency_key_a_failed_write_is_not_replayed(self, client_factory):
         transport, client = client_factory(transport_failure(), json_response(envelope({})))
-        with pytest.raises(Exception):
+        with pytest.raises(ApiError):
             client.fraud().events.record(EVENT)
         assert len(transport.requests_to("/events/transactions")) == 1
 

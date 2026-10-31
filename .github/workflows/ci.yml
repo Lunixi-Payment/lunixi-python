@@ -1,40 +1,35 @@
-name: CI
-
-on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
-  workflow_dispatch:
-
+name: Python SDK and native frameworks
+on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
-
 jobs:
-  tests:
-    name: Tests (Python ${{ matrix.python }})
+  core:
     runs-on: ubuntu-latest
-    # Official Python images: every supported version runs whatever Ubuntu the
-    # runner has (setup-python no longer ships 3.9 for the newest runners).
-    container: python:${{ matrix.python }}-slim
     strategy:
-      fail-fast: false
       matrix:
-        python: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        python: ['3.9', '3.10', '3.12', '3.14']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ matrix.python }}
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install ".[dev]"
-      - run: python -m pytest -q
-
-  package:
-    name: Build and check package
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q --ignore=tests/frameworks
+  native:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.12'
-      - run: python -m pip install --upgrade pip build twine
+      - run: python -m pip install -r requirements-dev.lock
+      - run: python -m pip install --no-deps -e .
+      - run: ruff check src integrations tests tools
+      - run: ruff format --check src integrations tests tools
+      - run: mypy src/lunixi
+      - run: bandit -r src/lunixi integrations -q
+      - run: pip-audit -r requirements-dev.lock
+      - run: python -m pytest -q
       - run: python -m build
-      - run: python -m twine check dist/*
+      - run: python tools/check_distribution.py

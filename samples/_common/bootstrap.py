@@ -4,7 +4,7 @@ Settings come from the environment, so no credential is written into a file in
 this repository. Export them in your shell, or load them from your secret
 manager before running a sample:
 
-    export LUNIXI_BASE_URL="https://api.lunixi.com"
+    export LUNIXI_BASE_URL="https://api-gateway.lunixi.com"
     export LUNIXI_KEY_ID="kid_..."
     export LUNIXI_PRIVATE_KEY_FILE="/secure/path/lunixi-private-key.pem"
 

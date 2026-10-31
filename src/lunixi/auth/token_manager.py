@@ -13,6 +13,7 @@ The exchange request carries NO body, therefore no ``Digest`` header and no
 from __future__ import annotations
 
 import binascii
+import math
 import os
 import threading
 import time
@@ -97,14 +98,14 @@ class InMemoryTokenStore:
 
     def get(self) -> Optional[str]:
         with self._lock:
-            if self._token is None or self._expires_at <= time.time():
+            if self._token is None or self._expires_at <= time.monotonic():
                 return None
             return self._token
 
     def set(self, token: str, ttl_seconds: int) -> None:
         with self._lock:
             self._token = token
-            self._expires_at = time.time() + max(1, ttl_seconds) - _EXPIRY_SKEW_SECONDS
+            self._expires_at = time.monotonic() + max(1, ttl_seconds) - _EXPIRY_SKEW_SECONDS
 
     def clear(self) -> None:
         with self._lock:
@@ -171,20 +172,24 @@ class TokenManager:
                 None,
                 self._config.timeout_seconds,
             )
-        except TransportError as error:
+        except TransportError:
             # Not retried: the nonce has been spent and the ±5 minute window is
             # already running, so a blind retry of the same signed request
             # could be refused as a replay. The caller retries the call, which
             # signs afresh.
-            raise ApiError(f"Token request failed: {error}") from error
+            raise ApiError("Token request failed without a confirmed response.") from None
 
+        if len(response.body) > self._config.max_response_bytes:
+            raise ApiError("Authentication response exceeds the configured limit.")
         body = response.json()
         if not response.ok:
-            message = _message_of(body) or f"Authentication failed (HTTP {response.status_code})."
+            message = (
+                f"Authentication failed (HTTP {response.status_code}); response content withheld."
+            )
             error_kwargs: Dict[str, Any] = {
                 "status_code": response.status_code,
                 "code": _code_of(body),
-                "response": body,
+                "response": None,
                 "request_id": response.header("x-request-id"),
             }
             if response.status_code in (401, 403):
@@ -196,7 +201,7 @@ class TokenManager:
             raise ApiError(
                 "The authentication response carried no access token.",
                 status_code=response.status_code,
-                response=body,
+                response=None,
                 request_id=response.header("x-request-id"),
             )
         return token, _read_ttl(body)
@@ -221,21 +226,27 @@ def _read_token(body: Mapping[str, Any]) -> Optional[str]:
 
 
 def _read_ttl(body: Mapping[str, Any]) -> int:
+    lifetimes = []
     for source in (body, data_of(body)):
         if not isinstance(source, Mapping):
             continue
-        for key in ("expires_in", "expiresIn"):
+        for key in ("expires_in", "expiresIn", "expires_at", "expiresAt"):
             value = source.get(key)
-            if isinstance(value, bool):
+            if isinstance(value, bool) or not isinstance(value, (int, float, str)):
                 continue
-            if isinstance(value, int):
-                return value
-            if isinstance(value, (float, str)):
-                try:
-                    return int(float(value))
-                except ValueError:
-                    continue
-    return _DEFAULT_TTL_SECONDS
+            try:
+                seconds = float(value)
+                if not math.isfinite(seconds):
+                    raise ValueError
+                if key in ("expires_at", "expiresAt"):
+                    seconds -= time.time()
+                lifetimes.append(int(seconds))
+            except (ValueError, OverflowError):
+                raise ApiError("Authentication response has an invalid token lifetime.") from None
+    ttl = min(lifetimes) if lifetimes else _DEFAULT_TTL_SECONDS
+    if ttl <= _EXPIRY_SKEW_SECONDS or ttl > 86400:
+        raise ApiError("Authentication response has an unusable token lifetime.")
+    return ttl
 
 
 def _message_of(body: Mapping[str, Any]) -> Optional[str]:

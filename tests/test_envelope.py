@@ -73,7 +73,9 @@ class TestPageInfo:
         assert page.total_count is None
 
     def test_the_transitional_copy_inside_data_is_still_read(self):
-        body = envelope({"items": [{"id": "a"}], "pageInfo": {"hasMore": False, "nextCursor": None}})
+        body = envelope(
+            {"items": [{"id": "a"}], "pageInfo": {"hasMore": False, "nextCursor": None}}
+        )
         page = Page(body)
         assert page.items == [{"id": "a"}]
         assert page.has_more is False

@@ -2,7 +2,7 @@
 
 Every credential in this suite is generated here or read from
 ``tests/fixtures/``. No real key, secret or account identifier appears in any
-test, and no test performs a network call.
+test. Only the transport security fixture opens a local HTTPS listener.
 """
 
 from __future__ import annotations
@@ -13,9 +13,11 @@ from typing import Any, Dict
 
 import pytest
 
+from integrations.common import Orders, Settings
 from lunixi.auth.ed25519_signer import generate_key_pair
 from lunixi.client import LunixiClient
 
+from .support.payment_gateway import PaymentGateway
 from .support.recording_transport import RecordingTransport, envelope, json_response
 
 FIXTURE_DIR = pathlib.Path(__file__).parent / "fixtures"
@@ -95,3 +97,26 @@ __all__ = [
     "make_client",
     "token_response",
 ]
+
+
+@pytest.fixture
+def payment_setup(tmp_path, signature_vectors):
+    gateway = PaymentGateway()
+    client = LunixiClient(
+        base_url="https://api-gateway.lunixi.com",
+        key_id="mk_test",
+        private_key=signature_vectors["privateKeyPem"],
+        transport=gateway,
+        max_retries=0,
+    )
+    settings = Settings(
+        "https://testserver",
+        "merchant_test",
+        "synthetic_webhook_secret_0123456789",
+        "synthetic_session_secret_0123456789_separate",
+        b"t" * 32,
+        str(tmp_path / "orders.sqlite3"),
+    )
+    orders = Orders(settings, client)
+    orders.install()
+    return orders, gateway

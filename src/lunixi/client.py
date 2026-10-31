@@ -16,6 +16,7 @@ from .auth.token_manager import TokenManager, TokenStore
 from .configuration import DEFAULT_AUTH_TOKEN_PATH, Configuration
 from .fraud.fraud_client import FraudClient
 from .http.transport import HttpTransport
+from .payments import PaymentsClient
 from .webhook.verifier import WebhookVerifier
 
 __all__ = ["LunixiClient"]
@@ -29,7 +30,7 @@ class LunixiClient:
         from lunixi import LunixiClient
 
         client = LunixiClient(
-            base_url="https://api.lunixi.com",
+            base_url="https://api-gateway.lunixi.com",
             key_id="kid_...",
             private_key=open("lunixi-private-key.pem").read(),
         )
@@ -70,6 +71,8 @@ class LunixiClient:
         user_agent: Optional[str] = None,
         transport: Optional[HttpTransport] = None,
         token_store: Optional[TokenStore] = None,
+        allow_loopback_http: bool = False,
+        max_response_bytes: int = 8 * 1024 * 1024,
     ) -> None:
         self._config = Configuration(
             base_url=base_url,
@@ -79,11 +82,18 @@ class LunixiClient:
             max_retries=max_retries,
             user_agent=user_agent,
             transport=transport,
+            allow_loopback_http=allow_loopback_http,
+            max_response_bytes=max_response_bytes,
         )
         self._signer = Ed25519Signer(private_key)
         self._tokens = TokenManager(self._config, self._signer, token_store)
         self._api = ApiClient(self._config, self._signer, self._tokens)
         self._fraud = FraudClient(self._api)
+        self._payments = PaymentsClient(self._api)
+
+    def payments(self) -> PaymentsClient:
+        """Typed payment intent, read, capture, refund, void and split operations."""
+        return self._payments
 
     def fraud(self) -> FraudClient:
         """The fraud surface: decisions, decision logs and event ingest."""
@@ -109,7 +119,7 @@ class LunixiClient:
         """The validated configuration."""
         return self._config
 
-    def webhooks(self, secret: str, **kwargs) -> WebhookVerifier:
+    def webhooks(self, secret: "str | list[str]", **kwargs) -> WebhookVerifier:
         """Builds a verifier for one webhook endpoint's secret.
 
         A secret belongs to an endpoint, not to an account, so this is a

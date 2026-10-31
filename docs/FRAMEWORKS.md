@@ -1,0 +1,62 @@
+# Runnable framework integrations
+
+These are complete source applications around the same SDK/Commerce workflow, not separately published framework plugins. Use the pinned development lock on Python 3.12+ for the verified Django 6.1.2, FastAPI 0.162.0 and Flask 3.1.3 targets. Existing stores should adapt their own authentication/order/fulfillment models; the examples use real persisted sample orders/stock and enforce ownership.
+
+## Server setup
+
+From the repository root:
+
+```sh
+python 3.12 -m venv .venv
+.venv/bin/pip install -r requirements-dev.lock
+.venv/bin/pip install --no-deps -e .
+```
+
+Set the following through the server's protected environment/secret manager (no real values belong in an env file committed to Git):
+
+| Variable | Purpose |
+|---|---|
+| `LUNIXI_PUBLIC_ORIGIN` | Trusted HTTPS application origin, e.g. `https://shop.example` |
+| `LUNIXI_MERCHANT_ID` | Merchant identity matched against authenticated payment GET |
+| `LUNIXI_KEY_ID`, `LUNIXI_PRIVATE_KEY` | Registered Ed25519 merchant key, TEST/LIVE selected by key |
+| `LUNIXI_WEBHOOK_SECRET` | Independent endpoint secret, at least 16 characters |
+| `LUNIXI_SESSION_SECRET` | Independent session signing secret, at least 32 characters |
+| `LUNIXI_ENCRYPTION_KEY` | Base64 of a separate random 32-byte key, backed up outside DB/web root |
+| `LUNIXI_DATABASE` | Absolute persistent SQLite file path outside web root; parent directory exists |
+| `LUNIXI_CHECKOUT_MODE` | `hosted` (default) or `embedded` |
+| `LUNIXI_PREAUTH` | `true` enables authorization-only checkout; otherwise immediate capture |
+| `LUNIXI_LOCALE` | `en` or `tr` |
+| `LUNIXI_GATEWAY_ORIGIN` | Optional trusted operator override; defaults to `https://api-gateway.lunixi.com` |
+
+Generate independent secrets locally with `secrets.token_urlsafe(48)` and the encryption key with `base64.b64encode(os.urandom(32)).decode()`. Never derive one from another. Configure TLS termination, backups, server body/time limits and protected logs. The examples accept only the configured Host and use Secure/HttpOnly/SameSite cookies. Provider callback POSTs are informational redirects into an owned GET; they do not require or replace the signed webhook.
+
+Register **`<LUNIXI_PUBLIC_ORIGIN>/webhook`** in Lunixi. Preserve exact raw bytes and `X-Lunixi-*` headers; a 2xx webhook response is sent only after native commit, failures return retryable 503. Browser tokens are returned only after session/customer/order ownership and CSRF validation. Signed events are consumed transactionally with native stock/order/outbox updates.
+
+## Native lifecycle
+
+- SQLite store uses disk-backed per-transaction connections, WAL, full synchronization and `BEGIN IMMEDIATE`; never use an in-memory replay set.
+- Django uses real auth users, native CSRF middleware, migrations, `transaction.atomic(durable=True)` and row locks; SQLite uses `transaction_mode=IMMEDIATE`. Disabling that setting loses the demonstrated concurrency guarantee.
+- Capture/refund/void are server-operator CLI operations with a persisted operation ID; customers cannot invoke them from an HTTP admin-free endpoint. Uncertain operations retain the same key/body, block new operations and need authenticated confirmation.23 hour replay fences prevent retrying beyond gateway key retention.
+- `FAILED` with unknown certainty remains review. Partial capture, split compensation/incomplete aggregates and native fulfillment holds do not ship goods. Changed native totals/currency invalidate old attempts. Native outbox rows queue notifications after commit; wire the existing application's delivery worker to this queue, preserving sending/uncertain review semantics. No external email/shipping provider is invoked by the examples.
+- Keep the database, event IDs, operation IDs, server key and old credentials through reconciliation/refund retention. No uninstall/reset/purge endpoint exists.
+
+The checkout UI loads only the official Lunixi bundle, escapes text and supports en/tr. Form method availability stays in the Lunixi panel. CSP uses a per-response nonce and trusted Lunixi origins; review the origins needed by your deployed3DS/form configuration. PAN/CVV never enters these servers.
+
+## Verification
+
+```sh
+.venv/bin/pytest -q tests/frameworks
+.venv/bin/pytest -q
+.venv/bin/ruff check src integrations tests
+.venv/bin/mypy src/lunixi
+.venv/bin/bandit -r src/lunixi integrations -q
+.venv/bin/pip-audit
+```
+
+Native framework tests exercise real users/cookies/CSRF, wrong customer/Host, raw webhook tamper/replay, rollback after native stock writes, concurrent database consumers, retained manual holds and changed-order denial. External gateway transport is synthetic. No live charge/Marketplace approval/third-party theme compatibility is claimed. See [Django](DJANGO.md), [FastAPI](FASTAPI.md), [Flask](FLASK.md).
+
+## Provider browser return
+
+Lunixi hosted, split and 3DS flows POST to `/return/<order-key>`. A cross-site POST may omit the SameSite=Lax cookie. This informational route therefore ignores the entire body and sends **303** to the same relative `/return/<order-key>` GET without accessing the session, order, database or gateway. Only that subsequent GET restores normal customer ownership checks and authenticated reconciliation, then redirects to the protected checkout page. Posted status, payment IDs and redirect URLs have no authority.
+
+The return POST has a **64 KiB** declared-body bound; enforce that wire limit at the HTTPS proxy too, including chunked requests. The signed webhook retains its separate 1 MiB bound. Only the informational return and signed webhook are exempt from checkout CSRF; all financial customer requests still require CSRF and ownership. Real loopback WSGI/Uvicorn HTTP tests prove no-session303, ignored forged fields and zero database/gateway calls on this hop.

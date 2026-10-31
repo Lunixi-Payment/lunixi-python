@@ -10,14 +10,17 @@ reports and ``repr`` output; signing key material must not.
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 from .errors import ConfigurationError
 from .http.transport import HttpTransport, UrllibTransport
+from .validation import gateway_path, header_value, origin_url
 
 __all__ = ["Configuration", "DEFAULT_AUTH_TOKEN_PATH"]
 
-DEFAULT_AUTH_TOKEN_PATH = "/api/v1/auth/token"
+AUTHENTICATION_PATH = "/api/v1/auth/token"
+DEFAULT_AUTH_TOKEN_PATH = AUTHENTICATION_PATH
 
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 _DEFAULT_MAX_RETRIES = 2
@@ -40,7 +43,7 @@ class Configuration:
     """Connection and credential settings for one Lunixi account.
 
     Args:
-        base_url: Gateway origin, for example ``https://api.lunixi.com``. A
+        base_url: Gateway origin, for example ``https://api-gateway.lunixi.com``. A
             trailing slash is stripped so paths concatenate cleanly.
         key_id: The key id (``kid``) shown next to your key in the console.
         private_key: Your Ed25519 private key. A PKCS#8 PEM block is the
@@ -69,6 +72,7 @@ class Configuration:
         "max_retries",
         "user_agent",
         "transport",
+        "max_response_bytes",
     )
 
     def __init__(
@@ -82,29 +86,41 @@ class Configuration:
         max_retries: int = _DEFAULT_MAX_RETRIES,
         user_agent: Optional[str] = None,
         transport: Optional[HttpTransport] = None,
+        allow_loopback_http: bool = False,
+        max_response_bytes: int = 8 * 1024 * 1024,
     ) -> None:
-        self.base_url = _required(base_url, "base_url").rstrip("/")
-        self.key_id = _required(key_id, "key_id")
-        self.auth_token_path = _required(auth_token_path, "auth_token_path")
+        self.base_url = origin_url(_required(base_url, "base_url"), allow_loopback_http)
+        self.key_id = header_value(_required(key_id, "key_id"), "key_id")
+        self.auth_token_path = gateway_path(_required(auth_token_path, "auth_token_path"))
 
-        if not str(self.base_url).startswith(("http://", "https://")):
-            raise ConfigurationError(
-                "Configuration field 'base_url' must start with http:// or https://."
-            )
-        if not self.auth_token_path.startswith("/"):
-            raise ConfigurationError("Configuration field 'auth_token_path' must start with '/'.")
-
-        if not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
-            raise ConfigurationError("Configuration field 'timeout_seconds' must be positive.")
-        if not isinstance(max_retries, int) or isinstance(max_retries, bool) or max_retries < 0:
-            raise ConfigurationError(
-                "Configuration field 'max_retries' must be an integer of 0 or more."
-            )
-
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (int, float))
+            or not math.isfinite(timeout_seconds)
+            or not 0 < timeout_seconds <= 120
+        ):
+            raise ConfigurationError("timeout_seconds must be finite, positive and at most 120.")
+        if (
+            isinstance(max_retries, bool)
+            or not isinstance(max_retries, int)
+            or not 0 <= max_retries <= 5
+        ):
+            raise ConfigurationError("max_retries must be an integer from 0 to 5.")
+        if (
+            isinstance(max_response_bytes, bool)
+            or not isinstance(max_response_bytes, int)
+            or not 1024 <= max_response_bytes <= 32 * 1024 * 1024
+        ):
+            raise ConfigurationError("max_response_bytes must be between 1 KiB and 32 MiB.")
+        self.max_response_bytes = max_response_bytes
         self.timeout_seconds = float(timeout_seconds)
         self.max_retries = max_retries
-        self.user_agent = user_agent or f"lunixi-sdk/{_package_version()}"
-        self.transport: HttpTransport = transport or UrllibTransport()
+        self.user_agent = header_value(
+            user_agent or f"lunixi-sdk/{_package_version()}", "user_agent"
+        )
+        self.transport: HttpTransport = transport or UrllibTransport(
+            max_response_bytes=max_response_bytes
+        )
 
         # `private_key` is accepted here for a single-argument construction, but
         # is deliberately not stored: the caller's value is consumed by
@@ -113,11 +129,11 @@ class Configuration:
 
     def url_for(self, path: str) -> str:
         """Absolute URL for a gateway path (which must start with ``/``)."""
-        return self.base_url + path
+        return self.base_url + gateway_path(path)
 
     def __repr__(self) -> str:  # pragma: no cover - formatting only
         return (
-            f"Configuration(base_url={self.base_url!r}, key_id={self.key_id!r}, "
+            f"Configuration(base_url={self.base_url!r}, key_id=<redacted>, "
             f"timeout_seconds={self.timeout_seconds}, max_retries={self.max_retries})"
         )
 

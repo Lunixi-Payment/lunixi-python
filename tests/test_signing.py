@@ -14,7 +14,7 @@ import pytest
 
 from lunixi.auth.canonical_request import build_canonical_request, digest_for_body
 from lunixi.auth.ed25519_signer import Ed25519Signer, generate_key_pair, verify_signature
-from lunixi.errors import SignatureError
+from lunixi.errors import ConfigurationError, SignatureError
 from lunixi.http.transport import serialize_body
 
 
@@ -62,9 +62,10 @@ class TestCanonicalString:
         # Signing the bare path while sending the query string is the classic
         # rejected-signature bug; the URL line must hold both.
         assert "?" in case["canonical"].split("\n")[1]
-        assert build_canonical_request(
-            case["method"], case["url"], case["date"], case["nonce"]
-        ) == case["canonical"]
+        assert (
+            build_canonical_request(case["method"], case["url"], case["date"], case["nonce"])
+            == case["canonical"]
+        )
 
     def test_an_empty_digest_argument_adds_no_line(self):
         assert "Digest" not in build_canonical_request("GET", "/x", "d", "n", "")
@@ -221,5 +222,5 @@ class TestSerializeBody:
         assert serialize_body([{"eventId": "evt-1"}]) == '[{"eventId":"evt-1"}]'
 
     def test_nan_is_refused_rather_than_sent_as_invalid_json(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             serialize_body({"amount": float("nan")})

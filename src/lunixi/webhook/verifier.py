@@ -61,7 +61,7 @@ class WebhookEvent:
         raw: The whole decoded envelope.
     """
 
-    __slots__ = ("id", "type", "timestamp", "data", "raw")
+    __slots__ = ("id", "type", "timestamp", "data", "raw", "raw_body_hash")
 
     def __init__(
         self,
@@ -71,12 +71,14 @@ class WebhookEvent:
         timestamp: Optional[datetime],
         data: Mapping[str, Any],
         raw: Mapping[str, Any],
+        raw_body_hash: Optional[str] = None,
     ) -> None:
         self.id = id
         self.type = type
         self.timestamp = timestamp
         self.data = data
         self.raw = raw
+        self.raw_body_hash = raw_body_hash
 
     def __repr__(self) -> str:  # pragma: no cover - formatting only
         return f"WebhookEvent(id={self.id!r}, type={self.type!r})"
@@ -93,11 +95,31 @@ class WebhookVerifier:
             since an attacker may re-send a captured request forever.
     """
 
-    def __init__(self, secret: str, *, tolerance_seconds: Optional[int] = _DEFAULT_TOLERANCE_SECONDS) -> None:
-        if not isinstance(secret, str) or secret.strip() == "":
-            raise ConfigurationError("A webhook secret is required.")
-        self._secret = secret
+    def __init__(
+        self,
+        secret: "str | list[str]",
+        *,
+        tolerance_seconds: Optional[int] = _DEFAULT_TOLERANCE_SECONDS,
+        allow_legacy_header_fields: bool = False,
+    ) -> None:
+        secrets = secret if isinstance(secret, list) else [secret]
+        if not 1 <= len(secrets) <= 5 or any(
+            not isinstance(v, str) or not v.strip() or len(v) > 1024 for v in secrets
+        ):
+            raise ConfigurationError(
+                "A webhook secret is required; provide at most five rotating secrets."
+            )
+        if tolerance_seconds is not None and (
+            isinstance(tolerance_seconds, bool)
+            or not isinstance(tolerance_seconds, int)
+            or not 1 <= tolerance_seconds <= 3600
+        ):
+            raise ConfigurationError(
+                "Webhook tolerance must be 1–3600 seconds or explicit offline None."
+            )
+        self._secrets = tuple(secrets)
         self._tolerance_seconds = tolerance_seconds
+        self._allow_legacy_header_fields = allow_legacy_header_fields
 
     def verify(self, raw_body: "str | bytes", headers: Mapping[str, Any]) -> WebhookEvent:
         """Verifies one webhook and returns it.
@@ -112,6 +134,8 @@ class WebhookVerifier:
                 item, no v2 item matches, or the body is not JSON.
         """
         body = raw_body if isinstance(raw_body, bytes) else str(raw_body).encode("utf-8")
+        if len(body) > 1024 * 1024:
+            raise WebhookVerificationError("Webhook body exceeds the 1 MiB limit.")
         timestamp = _header(headers, HEADER_TIMESTAMP)
         signature = _header(headers, HEADER_SIGNATURE)
         event_id = _header(headers, HEADER_EVENT_ID)
@@ -123,34 +147,38 @@ class WebhookVerifier:
             )
 
         parsed_timestamp = _parse_timestamp(timestamp)
+        if parsed_timestamp is None:
+            raise WebhookVerificationError("The webhook timestamp is not a valid date.")
         if self._tolerance_seconds is not None:
-            if parsed_timestamp is None:
-                raise WebhookVerificationError("The webhook timestamp is not a valid date.")
             age = abs((datetime.now(timezone.utc) - parsed_timestamp).total_seconds())
             if age > self._tolerance_seconds:
                 raise WebhookVerificationError(
                     "The webhook timestamp is outside the tolerance window."
                 )
 
-        candidates = [value for scheme, value in _parse_signature_header(signature) if scheme == _SCHEME_V2]
+        candidates = [
+            value for scheme, value in _parse_signature_header(signature) if scheme == _SCHEME_V2
+        ]
         if not candidates:
             raise WebhookVerificationError("The webhook signature carries no v2 item.")
 
         # HMAC over the EXACT raw body bytes — no parse, no re-serialization.
-        expected = hmac.new(
-            self._secret.encode("utf-8"),
-            event_id.encode("utf-8") + b"." + timestamp.encode("utf-8") + b"." + body,
-            hashlib.sha256,
-        ).hexdigest()
-
-        # Any ONE matching item is enough: during rotation both the new and the
-        # old secret's signature are sent, and this endpoint holds only one.
-        if not any(hmac.compare_digest(expected, candidate) for candidate in candidates):
+        matched = False
+        for secret in self._secrets:
+            expected = hmac.new(
+                secret.encode("utf-8"),
+                event_id.encode("utf-8") + b"." + timestamp.encode("utf-8") + b"." + body,
+                hashlib.sha256,
+            ).hexdigest()
+            for candidate in candidates:
+                if re.fullmatch("[0-9a-fA-F]{64}", candidate):
+                    matched = hmac.compare_digest(expected, candidate.lower()) or matched
+        if not matched:
             raise WebhookVerificationError("Webhook signature verification failed.")
 
         try:
             envelope = json.loads(body.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError) as error:
+        except (ValueError, UnicodeDecodeError, RecursionError) as error:
             raise WebhookVerificationError(
                 "The webhook signature verified but the body is not valid JSON."
             ) from error
@@ -159,13 +187,31 @@ class WebhookVerifier:
                 "The webhook signature verified but the body is not a JSON object."
             )
 
+        signed_id = _non_empty(envelope.get("id"))
+        signed_type = _non_empty(envelope.get("type"))
+        if (signed_id is not None and signed_id != event_id) or (
+            signed_type is not None and event_type is not None and signed_type != event_type
+        ):
+            raise WebhookVerificationError(
+                "Signed webhook identity does not match delivery headers."
+            )
+        strict = signed_id is not None and signed_type is not None
+        if not strict and not self._allow_legacy_header_fields:
+            raise WebhookVerificationError("Signed event id/type are required in the raw envelope.")
         data = envelope.get("data")
+        if (
+            (data is not None and not isinstance(data, dict))
+            or len(event_id) > 200
+            or len(signed_type or event_type or "") > 200
+        ):
+            raise WebhookVerificationError("Webhook data and identity are invalid.")
         return WebhookEvent(
-            id=_non_empty(envelope.get("id")) or event_id,
-            type=_non_empty(envelope.get("type")) or event_type,
+            id=signed_id or event_id,
+            type=signed_type or event_type,
             timestamp=parsed_timestamp,
-            data=data if isinstance(data, dict) else envelope,
+            data=data if isinstance(data, dict) else {},
             raw=envelope,
+            raw_body_hash=hashlib.sha256(body).hexdigest() if strict else None,
         )
 
 
@@ -197,7 +243,7 @@ def _parse_timestamp(value: str) -> Optional[datetime]:
     if parsed.tzinfo is None:
         # No offset means UTC: the gateway always sends one, so a bare value
         # is an unusual sender rather than local time.
-        return parsed.replace(tzinfo=timezone.utc)
+        return None
     return parsed
 
 
@@ -206,7 +252,7 @@ def _header(headers: Mapping[str, Any], name: str) -> Optional[str]:
     for key, value in (headers or {}).items():
         if str(key).lower() == wanted:
             if isinstance(value, (list, tuple)):
-                return str(value[0]) if value else None
+                return str(value[0]) if len(value) == 1 else None
             return str(value)
     return None
 

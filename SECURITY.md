@@ -1,25 +1,13 @@
-# Security Policy
+# Security policy
 
-## Reporting a vulnerability
+The maintained source line is0.2.x. Report a suspected vulnerability privately through Lunixi merchant support or the repository's private security advisory facility. Do not publish credentials, raw customer/webhook bodies, access/browser tokens, signing keys or database dumps in an issue. Provide versions, synthetic reproduction steps and redacted request IDs; no response-time guarantee is implied.
 
-Please do not report security problems in public GitHub issues, pull requests
-or discussions.
+SDK 0.2 tightens HTTPS/origin/path/header validation, bounded transport, JS-compatible JSON, seed/public-key validation, error redaction and signed webhook identity. These intentionally reject previously accepted unsafe inputs. Raw server error messages/bodies are withheld; use typed error class, code and request ID. HTTP requires an explicit numeric-loopback test opt-in; checkout orchestration always requires HTTPS. TLS hostname/certificate verification and redirect protection must remain enabled.
 
-Email **developer@lunixi.com** with the subject line
-`Security: Lunixi Python SDK` and include:
+Verify exact raw webhook bytes, signed id/type, freshness and HMAC before interpreting payment metadata. A verifier alone does not consume a replay: commit durable event consumption together with the idempotent native order change. The Commerce service and runnable integrations demonstrate this contract. Never finalize from browser callbacks, an unconfirmed HTTP 2xx mutation response or one split leg.
 
-- the package version (`lunixi-sdk`) and your runtime version,
-- what an attacker could do and what is needed to do it,
-- steps or a minimal example that shows the problem.
+Keep one client/cache per trusted origin and merchant key. A custom token store must be explicitly scoped by both; never reuse an unscoped cache across merchants. Protect independent session, webhook, signing and token-encryption secrets. Preserve old encryption keys/credentials and durable operation IDs throughout reconciliation/refund retention. Do not log request bodies, Authorization/signature headers or tokens. One-use sample checkout invitation URLs are temporary customer credentials: disclose only to the intended customer and redact their request paths in access logs.
 
-Leave real API keys, private keys, webhook secrets, tokens and customer data
-out of the report. If an example needs a key, use a test key you can revoke.
+Gateway idempotency retention is finite. Unconfirmed create/mutation retries older than 23 hours are blocked; authenticated GET reconciliation remains available. `FAILED` without outcome certainty stays review and never authorizes another charge. Only verified zero-settlement VOIDED/EXPIRED releases can be terminal. The examples do not reset ambiguous attempts.
 
-We reply to confirm we received the report and keep you informed while we
-work on it. Fixes are released as a new version of this package and listed in
-[CHANGELOG.md](CHANGELOG.md).
-
-## Supported versions
-
-Use the latest release. Security fixes are published as new versions; they are
-not applied to older releases.
+Review native database backups, the notification outbox, unresolved operations and manual fulfillment holds. No application should send an external notification or ship goods inside its payment transaction. The examples queue durable native outbox entries; delivery belongs to the existing application's post-commit notification worker.

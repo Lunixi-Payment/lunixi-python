@@ -95,12 +95,12 @@ def driven_client(client_factory):
     walk through it.
     """
     responses = [
-        json_response(envelope({"decision": "allow"})),                  # evaluate
-        json_response(envelope([{"traceId": _TRACE_ID}])),                # list
-        json_response(envelope({"traceId": _TRACE_ID})),                  # get
-        json_response(envelope([{"traceId": _TRACE_ID}])),                # latest_for_payment
-        json_response(envelope([{"traceId": _TRACE_ID}])),                # iterate
-        json_response(envelope({"eventId": "evt-surface"})),              # record
+        json_response(envelope({"decision": "allow"})),  # evaluate
+        json_response(envelope([{"traceId": _TRACE_ID}])),  # list
+        json_response(envelope({"traceId": _TRACE_ID})),  # get
+        json_response(envelope([{"traceId": _TRACE_ID}])),  # latest_for_payment
+        json_response(envelope([{"traceId": _TRACE_ID}])),  # iterate
+        json_response(envelope({"eventId": "evt-surface"})),  # record
         json_response(envelope({"total": 1, "inserted": 1, "results": []})),  # record_batch
     ]
     return client_factory(*responses)
@@ -213,16 +213,11 @@ class TestLockNegativeControl:
 
     def test_a_console_route_would_be_caught(self, client_factory):
         transport, client = client_factory(json_response(envelope({"items": []})))
-        client.api().request("GET", "/api/panel/v1/fraud/cases")
+        from lunixi.errors import ConfigurationError
 
-        reached = {
-            _normalize(request.method, request.path)
-            for request in transport.requests
-            if "/fraud" in request.path
-        }
-        assert reached == {("GET", "/api/panel/v1/fraud/cases")}
-        assert reached != EXPECTED_ROUTES
-        assert any("/api/panel" in request.path for request in transport.requests)
+        with pytest.raises(ConfigurationError):
+            client.api().request("GET", "/api/panel/v1/fraud/cases")
+        assert transport.requests == []
 
     def test_a_missing_route_would_be_caught(self, client_factory):
         transport, client = client_factory(json_response(envelope({"decision": "allow"})))

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hmac
 from typing import Tuple
 
 from cryptography.exceptions import UnsupportedAlgorithm
@@ -152,8 +153,13 @@ def _from_raw_material(material: bytes) -> Ed25519PrivateKey:
         if len(material) == _SEED_LENGTH:
             return Ed25519PrivateKey.from_private_bytes(material)
         if len(material) == _SEED_AND_PUBLIC_LENGTH:
-            # Seed-then-public-key export; only the seed is the private key.
-            return Ed25519PrivateKey.from_private_bytes(material[:_SEED_LENGTH])
+            key = Ed25519PrivateKey.from_private_bytes(material[:_SEED_LENGTH])
+            public = key.public_key().public_bytes(
+                serialization.Encoding.Raw, serialization.PublicFormat.Raw
+            )
+            if not hmac.compare_digest(public, material[_SEED_LENGTH:]):
+                raise SignatureError("Ed25519 seed/public export is inconsistent.")
+            return key
     except ValueError as error:
         raise SignatureError(f"Unusable Ed25519 private key material: {error}") from error
 

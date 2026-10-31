@@ -32,7 +32,7 @@ def main() -> int:
         operation_kind=OperationKind.CARD_SALE,
         transaction_ref=order_reference,
         payment={
-            "amount": "149.90",
+            "amount": 14990,
             "currency": "TRY",
             "installment": 1,
             # Never send a full card number or a CVC to this endpoint. The

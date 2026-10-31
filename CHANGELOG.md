@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 —2026-10-31
+
+- Typed payment intents/read/list/capture/refund/void/methods and split read/list/refund helpers; existing fraud API preserved.
+- JS-compatible numeric-key/scalar JSON, safe integer/header/path validation, HTTPS-only verified transport, bounded responses and redacted errors.
+- Strict signed webhook id/type binding, raw-body proof and rotating secrets; legacy nonfinancial fallback requires explicit opt-in.
+- Durable encrypted checkout reservations, authenticated fee/split settlement, native atomic inbox/order callbacks, uncertainty handling and23 hour replay fences.
+- Runnable Django 6.1.2, FastAPI 0.162.0 and Flask 3.1.3 apps with real auth/session/CSRF/ORM/SQLite stock and outbox, English/Turkish guides and native framework tests.
+- Dependency floors updated;0.2.0 is a source release, not a package registry publication claim.
+
+
 This package follows semantic versioning. On the 0.x line a new API surface is
 a minor increase.
 

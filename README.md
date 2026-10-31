@@ -13,294 +13,141 @@
 
 **[Documentation](https://docs.lunixi.com/sdks/python) · [Changelog](https://github.com/Lunixi-Payment/lunixi-python/blob/main/CHANGELOG.md) · [Issues](https://github.com/Lunixi-Payment/lunixi-python/issues) · [Security](https://github.com/Lunixi-Payment/lunixi-python/blob/main/SECURITY.md)**
 
-Python client for the Lunixi platform. It carries the shared core — Ed25519
-request signing, token exchange, response-envelope decoding, cursor paging and
-a typed error hierarchy — plus the fraud decision and event API on top of it.
+Version **0.2.0** adds typed payment APIs and durable checkout orchestration while preserving the existing fraud decision/event API. The SDK is synchronous, thread-safe per client, and ships `py.typed`.
 
-Türkçe: [README.tr.md](README.tr.md)
+[Turkish](README.tr.md) · [Framework examples](docs/FRAMEWORKS.md) · [Django](docs/DJANGO.md) · [FastAPI](docs/FASTAPI.md) · [Flask](docs/FLASK.md)
 
-- **Requires:** Python 3.9 or newer
-- **Dependency:** [`cryptography`](https://pypi.org/project/cryptography/) for
-  Ed25519. HTTP uses the standard library, so nothing else is pulled in.
-- **Typed:** ships `py.typed`; every public function is annotated.
-- **License:** MIT
+| Component | Requirement |
+|---|---|
+| Core SDK | Python 3.9+; use a maintained Python runtime for deployment |
+| Runtime dependencies | `cryptography>=50.0.2,<51`, `rfc8785>=0.1.4,<0.2`; stdlib HTTP/SQLite |
+| Verified framework targets | Django 6.1.2 / FastAPI 0.162.0 / Flask 3.1.3 on Python 3.12.14 |
+| Payment form | Official Lunixi browser bundle or hosted `pay.lunixi.com` |
+| Durable example storage | SQLite on disk; Django's native ORM with IMMEDIATE transactions |
 
-```bash
-pip install lunixi-sdk
+## Installation
+
+The 0.2.0 source release is available through the repository/tag; a GitHub release does not imply a PyPI publication:
+
+```sh
+pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.0"
 ```
 
-## Quick start
+From a source checkout, `pip install -e .` installs the SDK; `pip install -e '.[frameworks]'` installs optional runtime dependencies. Framework apps and full native tests need Python 3.12+ and the source checkout. They are runnable examples, not separately registered framework packages.
+
+## Payment quick start
 
 ```python
-from lunixi import Channel, Decision, LunixiClient
+import os
+from lunixi import LunixiClient, CreateIntent
 
 client = LunixiClient(
-    base_url="https://api.lunixi.com",
-    key_id="kid_...",                     # from the console
-    private_key=private_key_pem,          # from your secret store
+    base_url="https://api-gateway.lunixi.com",
+    key_id=os.environ["LUNIXI_KEY_ID"],
+    private_key=os.environ["LUNIXI_PRIVATE_KEY"],
+    max_retries=0,
 )
+intent = client.payments().create_intent(
+    CreateIntent(1990, "TRY", "persisted-order-123",
+                 callback_url="https://shop.example/return/123"),
+    idempotency_key=persisted_attempt_key,
+)
+# Return only after authenticating ownership of the persisted order:
+public_form_configuration = intent.browser_config()
+# Or redirect to the fixed hosted origin:
+hosted_url = intent.hosted_url
+```
 
-decision = client.fraud().evaluate(
+Money is integer minor units, from 1 to 9,007,199,254,740,991; booleans, floats, zero and removed root amount fields fail before token exchange/network. `minor_units('19.90','TRY')` converts a plain decimal string exactly; JPY has0 decimals and KWD 3. Preauthorization is a JSON boolean; an authorization is on hold, not paid. Available methods, installments, eligible shopping credit/meal cards, insurance and multi-card options belong to the Lunixi form/panel. The examples never collect card numbers/CVV.
+
+| Helper | Merchant API |
+|---|---|
+| `payments().create_intent(CreateIntent(...), idempotency_key=...)` | POST `/api/v1/payments/intents` → canonical response `paymentId` and `token` |
+| `get(payment_id)`, `list(**filters)` | GET `/api/v1/payments/{id}`, `/api/v1/payments` |
+| `capture(id, amount, idempotency_key=...)` | POST `/api/v1/payments/{id}/capture` |
+| `refund(id, amount, idempotency_key=..., reason=...)` | POST `/api/v1/payments/{id}/refund` |
+| `void(id, idempotency_key=...)` | POST `/api/v1/payments/{id}/void` |
+| `methods()` | GET `/api/v1/payments/methods`, signed |
+| `get_split(id)`, `list_splits(**filters)` | GET `/api/v1/payments/split/{id}`, `/api/v1/payments/split` |
+| `refund_split(id, amount, idempotency_key=...)` | POST `/api/v1/payments/split/{id}/refund` |
+
+Non-intent helpers return the complete response envelope, preserving `details`, `pageInfo` and request IDs. Financial helper keys are required and must come from durable application records. An HTTP 2xx mutation response does not prove settlement.
+
+## Durable native checkout
+
+`lunixi.commerce.CheckoutService` persists an immutable merchant/order/amount/currency snapshot and a stable attempt key **before** network I/O. It encrypts persisted browser tokens with a separate 32-byte server key. A native adapter supplies the transaction store and an idempotent native order callback using that **same connection/transaction**.
+
+```python
+from lunixi.commerce import CheckoutService, SqliteLedgerStore, SecretBox, OrderSnapshot
+
+ledger = SqliteLedgerStore("/secure/state/commerce.sqlite3")
+ledger.install()  # explicit schema setup, outside request handling
+service = CheckoutService(client, ledger, SecretBox(server_encryption_key_bytes))
+session = service.start(
+    "order-123", OrderSnapshot(merchant_id, "order-123", 1990, "TRY"),
+    "https://shop.example/return/order-123", hosted=True,
+)
+# `apply_native` validates current native totals/holds and writes using tx.connection.
+decision = service.reconcile("order-123", apply_native)
+```
+
+The runnable [framework integrations](docs/FRAMEWORKS.md) implement real order, stock, inbox and native outbox writes; a no-op callback is not a fulfillment implementation. Native fraud/manual holds remain effective after capture. Changed native totals/currency cannot be completed by an older intent. Buyer installment fees require the persisted fingerprint and stay separate from the basket; split success requires complete, balanced parent evidence with no compensation/reconciliation requirement. Partial capture is on hold.
+
+Browser query parameters/form events never mark paid. `service.webhook(raw_bytes, headers, secret, apply_native)` verifies raw-body v2 HMAC/freshness/signed id/type, then queries authenticated payment/split evidence. Payment GET's `data.id`, create result `paymentId` and webhook `data.intentId` identify the same payment. Durable row locking and unique event hashes commit with native writes; a failed callback rolls back both. Signed event-ID content collisions fail. Lost create responses recover only from a verified payment webhook plus authenticated GET echoing the original opaque reservation hash/fingerprint; an existing payment ID is never rebound.
+
+`service.mutate(order_key, persisted_operation_id, 'capture'|'refund'|'void', amount_or_none, apply_native)` reserves a durable operation and stable gateway key. `operation_status(...)` returns `pending`, `uncertain` or `confirmed` without exposing the key. New IDs are blocked while a prior operation is unresolved. Only authenticated balances/releases confirm success; refunds cannot exceed captured funds. Retry the exact original operation ID/amount after a timeout. Unconfirmed create/mutation retries older than 23 hours are blocked before POST, since gateway key retention is finite. GET reconciliation remains available. `FAILED` without outcome certainty stays review; this version provides no automatic ambiguous-attempt reset.
+
+## Authentication, transport and JSON
+
+Generate Ed25519 keys with `generate_key_pair()` and register only the public key. The SDK accepts PKCS8 PEM/DER, base64/hex seeds and validated 64-byte seed/public exports. `cryptography` provides curve/AES-GCM primitives. Keep one client per origin/merchant key; token refresh coalesces concurrent threads. A custom `TokenStore` must be explicitly scoped to that origin/key. Cache lifetime respects expiration/skew; credentials do not appear in config representations.
+
+HTTPS origins cannot contain credentials, path prefixes, query or fragment. API paths remain under `/api/v1/` without traversal or normalization escapes. Redirects are not followed, including authentication redirects. Defaults:30 seconds/request,8MiB response cap,2 extra retries; timeout is bounded to 120 seconds and retries to5. Writes retry only with a nonempty stable key, including a401 refresh. Signing uses exact compact UTF-8 JSON, JavaScript numeric-key ordering and RFC8785 ECMAScript scalar formatting; unsafe integers/non-finite numbers fail locally. An explicit numeric-loopback HTTP opt-in exists for transport tests; Commerce always requires HTTPS.
+
+## Existing fraud API
+
+```python
+from lunixi import Channel
+result = client.fraud().evaluate(
     channel=Channel.STANDALONE_API,
-    transaction_ref="order-2026-0001",
-    payment={"amount": "149.90", "currency": "TRY"},
-    customer={"id": "cus_88", "email": "buyer@example.com"},
+    transaction_ref="persisted-order-123",
+    payment={"amount":1990,"currency":"TRY"},
 )
-
-if decision.blocked:
-    refuse_the_order(decision.reasons)
-elif decision.requires_three_d:
-    retry_with_3d_secure()
-elif decision.requires_review:
-    hold_for_review(decision.trace_id)
-else:
-    authorize()
+if result.blocked:
+    refuse_order()
+elif result.requires_review or result.requires_three_d:
+    hold_for_review_or_three_ds()
 ```
 
-Build the client once at start-up and share it: the access-token cache lives on
-it, so a fresh client per request means a fresh token exchange per request.
+Fraud evaluate, decision-log list/get and event record/batch APIs retain their names/results. Decision/log calls remain bearer-authenticated; event ingest is signed per request. Batch ingestion supports up to 500 events and may partially succeed; inspect `result.failures()` and resend failed events with the same event IDs. `Page` preserves top-level cursor metadata; iterate using the returned cursor. No internal console route is a supported merchant API.
 
-## Authentication
-
-Two levels, and they are not interchangeable.
-
-**Token exchange.** `POST /api/v1/auth/token` is signed with your Ed25519
-private key and returns a short-lived access token. The SDK does this for you,
-caches the token and refreshes it once when the gateway reports it expired.
-
-**Per-request signature.** The event-ingest routes accept nothing less than a
-signature on every call: it is what binds an event to your account, so a body
-value cannot claim a different one. The SDK adds it where it is required.
-
-The canonical string that is signed is:
-
-```text
-<METHOD>\n<URL>\nX-Date:<value>\nX-Nonce:<value>[\nDigest:<value>]
-```
-
-`<URL>` is the path exactly as sent, **including the `/api/v1` prefix and any
-query string**. The `Digest` line appears only when a body is present.
-
-### Key handling
-
-You can generate the keypair yourself and upload only the public key, so the
-private key never exists outside your systems:
+## Other documented services and errors
 
 ```python
-from lunixi import generate_key_pair
-
-private_pem, public_pem = generate_key_pair()
-# store private_pem in your secret manager; upload public_pem in the console
-```
-
-Accepted private-key shapes: a PKCS#8 PEM block (recommended), base64 or hex
-PKCS#8 DER, or a bare 32-byte seed. Load it from a secret store — not from
-source, and not from a file inside your repository.
-
-## Fraud
-
-The customer-facing surface is **five routes**:
-
-| Call | Route |
-|---|---|
-| `fraud().evaluate(...)` | `POST /api/v1/fraud/decisions/evaluate` |
-| `fraud().decisions.list(...)` | `GET /api/v1/fraud/decision-logs` |
-| `fraud().decisions.get(trace_id)` | `GET /api/v1/fraud/decision-logs/{traceId}` |
-| `fraud().events.record(event)` | `POST /api/v1/fraud/events/transactions` |
-| `fraud().events.record_batch(events)` | `POST .../events/transactions/batch` |
-
-The console's own routes are not part of this surface. They carry no stability
-guarantee, so they are not published here.
-
-### Decision outcomes
-
-`allow`, `review`, `block`, `force_3d`. Note that `allowed` is **not** the
-inverse of `blocked`: `review` and `force_3d` are neither, and `force_3d` asks
-you to re-run the payment with 3-D Secure rather than refusing it.
-
-Field names use Python's `snake_case`; the `camelCase` spelling from the API
-reference is accepted as an alias. An unknown field raises locally and names
-the key, rather than costing you a round trip to find out.
-
-`tenant_id` is deliberately absent: the tenant is stamped from your access
-token, and a body value is ignored.
-
-### Event ingest
-
-Events are the history that counting rules read.
-
-```python
-result = client.fraud().events.record(
-    {
-        "eventId": "evt-0001",          # your id; a retry with the same id is deduplicated
-        "eventType": "card_sale",
-        "subjectType": "customer",
-        "occurredAt": "2026-10-11T08:29:00Z",
-    },
-    idempotency_key="evt-0001",
+response = client.api().request(
+    "GET", "/api/v1/payments/methods", step_up=True,
 )
-if result.deduplicated:
-    ...  # this event was already recorded
 ```
 
-Batches hold up to **500** events and the SDK refuses a larger one before it
-reaches the network, because the gateway rejects the whole batch.
+The generic authenticated layer can reach other documented merchant services with explicit `step_up=True` when required. This release does not claim typed subscription, KYC, identity, sanction, wallet, insurance, bank-connect, direct-card or split-initiation workflows. Browser form submission belongs to the official bundle.
 
-**A batch can succeed partially.** It answers `200` and keeps processing after
-an event fails validation, so the status code alone never proves the batch
-landed:
+Catch `LunixiError` or typed `ApiError`/`ValidationError`/`AuthenticationError`/`RateLimitError`/`ServiceUnavailableError`. Status, machine code, request ID and quota metadata remain available; raw remote error messages/bodies and transport exception text are withheld. Do not log raw successful responses either: they can carry browser tokens/customer data.
 
-```python
-result = client.fraud().events.record_batch(events, idempotency_key="feed-2026-10-11-01")
-for failure in result.failures():
-    log.warning("event %s rejected: %s", failure.event_id, failure.error)
+Low-level `WebhookVerifier` verifies signatures but does not claim replay IDs. Default signed id/type binding is strict. `allow_legacy_header_fields=True` preserves the old nonfinancial fallback explicitly and produces no financial replay proof; never use it for order fulfillment. `tolerance_seconds=None` is an explicit offline-fixture option, not a live setting. A secret list supports rotation; retain old endpoint secrets through the grace window.
+
+## Verify and build
+
+```sh
+pip install -r requirements-dev.lock
+pip install --no-deps -e .
+ruff check src integrations tests
+ruff format --check src integrations tests
+mypy src/lunixi
+bandit -r src/lunixi integrations -q
+pip-audit
+pytest -q
+python -m build
 ```
 
-Correct the body and resend a failure with the **same** `eventId`: the gateway
-deduplicates, so a resend cannot double-count an event that did land.
+The lock targets the verified Python 3.12 development environment. Core CI also exercises Python 3.9/3.10/3.14; framework tests run on 3.12. Native tests use real framework clients/users/CSRF/ORM/databases and synthetic external gateway transport. The HTTPS transport fixture binds only loopback. No live charge, external email or automatic shipment occurs in tests. Wheel contains the typed SDK; sdist/source also contains runnable apps, tests, original logos and EN/TR guides.
 
-## Reading a response
-
-Every successful response is wrapped:
-
-```json
-{ "status": "success", "code": "SUCCESS", "data": {}, "pageInfo": {}, "requestId": "..." }
-```
-
-Two things to know if you ever read the envelope yourself:
-
-- **There is no `success` field.** The outcome is in `status`, as the string
-  `"success"`. Code written against `response["success"]` reads `None` on every
-  response. Use `lunixi.is_success(response)`.
-- **`pageInfo` is a sibling of `data`, not nested inside it.** List endpoints
-  return `data` as a bare array, so paging metadata cannot live inside it.
-
-The feature clients already handle both.
-
-## Paging
-
-```python
-page = client.fraud().decisions.list(decision=Decision.REVIEW, limit=50)
-while True:
-    for row in page.items:
-        handle(row)
-    if not page.has_more or not page.next_cursor:
-        break
-    page = client.fraud().decisions.list(
-        decision=Decision.REVIEW, limit=50, cursor=page.next_cursor
-    )
-```
-
-Or let the SDK follow the cursors:
-
-```python
-for row in client.fraud().decisions.iterate(decision=Decision.REVIEW, limit=50):
-    handle(row)
-```
-
-A cursor is opaque: pass it back unchanged. Do not decode, build or edit one —
-a malformed cursor is rejected with `400`, it does not restart from page one.
-`total_count` is `None` unless the server actually counted, because a filtered
-count is expensive.
-
-## Errors
-
-Every error derives from `LunixiError`.
-
-| Class | Raised when |
-|---|---|
-| `ConfigurationError` | A local value is unusable; nothing was sent. |
-| `SignatureError` | The private key could not be loaded. |
-| `ValidationError` | `400` — the gateway rejected the body. |
-| `AuthenticationError` | `401` / `403` — signature, token or entitlement refused. |
-| `RateLimitError` | `429` — carries `retry_after` and `quota`. |
-| `ServiceUnavailableError` | `503` — carries `retry_after`. |
-| `ApiError` | Any other non-2xx answer, or no answer at all. |
-| `WebhookVerificationError` | An inbound webhook did not verify. |
-
-`retry_after` and the quota fields are `None` when the gateway did not send the
-header. It omits one rather than guessing, and so does this SDK — an invented
-number would make you retry at the wrong rate.
-
-```python
-from lunixi import RateLimitError
-
-try:
-    client.fraud().events.record(event, idempotency_key=event["eventId"])
-except RateLimitError as error:
-    sleep(error.retry_after or 30)
-```
-
-### Retries
-
-A `GET`, and any request you give an `idempotency_key`, is retried after a
-transport failure or a `5xx`. Anything else is not: the SDK cannot tell a lost
-request from a lost response, and replaying an unkeyed write can record the
-same event twice.
-
-`evaluate` is never retried automatically. It runs inside your payment flow, so
-whether a timed-out decision is retried, treated as a soft allow, or held is
-your policy to set.
-
-## Webhooks
-
-```python
-from lunixi import FraudEvents, WebhookVerifier, WebhookVerificationError
-
-verifier = WebhookVerifier(endpoint_secret)
-
-try:
-    event = verifier.verify(raw_body, request.headers)
-except WebhookVerificationError:
-    return 400                     # never act on an unverified payload
-
-if event.type == FraudEvents.FLOW_ASYNC_COMPLETED:
-    ...
-```
-
-**Pass the raw body.** The signature covers the exact bytes that arrived;
-parsing JSON and re-serializing it reorders keys and changes spacing, and
-verification then fails for every webhook. Capture the raw body before any JSON
-middleware touches it.
-
-Verification is fail-closed and checks timestamp freshness within a 300-second
-window by default. During a secret rotation the gateway sends two signature
-items and either one verifying is enough, so your endpoint keeps working while
-you swap secrets.
-
-The seven fraud event types are in `FraudEvents`; `FRAUD_EVENT_TYPES` holds
-them all.
-
-## Extending
-
-Any gateway route this version does not wrap is reachable with the signing,
-retry and error handling already in place:
-
-```python
-envelope = client.api().request(
-    "GET", "/api/v1/some/other/route", query={"limit": 25}
-)
-rows = lunixi.items_of(envelope)
-```
-
-Supply your own HTTP stack (for pooling, proxies or tracing) by implementing
-`HttpTransport` and passing `transport=`. In a multi-process deployment,
-implement `TokenStore` against a shared cache and pass `token_store=` so the
-workers share one token.
-
-## Development
-
-```bash
-python -m venv .venv
-.venv/bin/pip install -e ".[dev]"
-.venv/bin/python -m pytest
-```
-
-The suite runs entirely offline: it asserts on what the SDK puts on the wire
-through an injected transport, and verifies signing and webhook logic against
-committed vectors. Every key in it is synthetic and grants no access.
-
-## Samples
-
-Runnable examples are in [`samples/`](samples/). Each reads its settings from
-the environment, so no credential is written into a file.
+MIT · [Security](SECURITY.md) · [Contribution guide](CONTRIBUTING.md) · [Changelog](CHANGELOG.md).

@@ -10,10 +10,16 @@ connection pooling, proxies or tracing — supplies its own
 from __future__ import annotations
 
 import json
+import ssl
 import urllib.error
 import urllib.request
 from typing import Any, Dict, Mapping, Optional
 from urllib.parse import quote, urlencode
+
+import rfc8785
+
+from ..errors import ConfigurationError
+from ..validation import SAFE_INTEGER, gateway_path
 
 try:  # Python 3.8+
     from typing import Protocol, runtime_checkable
@@ -53,7 +59,46 @@ def serialize_body(body: Any) -> Optional[str]:
     """
     if body is None:
         return None
-    return json.dumps(body, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+    def emit(value: Any, depth: int = 0) -> str:
+        if depth > 32:
+            raise ConfigurationError("JSON nesting exceeds the supported depth.")
+        if isinstance(value, dict):
+            if not all(isinstance(k, str) for k in value):
+                raise ConfigurationError("JSON object keys must be strings.")
+            numeric = sorted(
+                (
+                    k
+                    for k in value
+                    if len(k) <= 10
+                    and k.isascii()
+                    and k.isdigit()
+                    and str(int(k)) == k
+                    and int(k) < 4294967295
+                ),
+                key=int,
+            )
+            keys = numeric + [k for k in value if k not in numeric]
+            return (
+                "{"
+                + ",".join(
+                    rfc8785.dumps(k).decode() + ":" + emit(value[k], depth + 1) for k in keys
+                )
+                + "}"
+            )
+        if isinstance(value, (list, tuple)):
+            return "[" + ",".join(emit(v, depth + 1) for v in value) + "]"
+        if isinstance(value, int) and not isinstance(value, bool) and abs(value) > SAFE_INTEGER:
+            raise ConfigurationError("JSON integers must be JavaScript-safe.")
+        try:
+            return rfc8785.dumps(value).decode("utf-8")
+        except (rfc8785.CanonicalizationError, TypeError, ValueError):
+            raise ConfigurationError("Unsupported or non-finite JSON value.") from None
+
+    result = emit(body)
+    if len(result.encode("utf-8")) > 1024 * 1024:
+        raise ConfigurationError("JSON request exceeds the 1 MiB limit.")
+    return result
 
 
 def build_path(path: str, query: Optional[Mapping[str, Any]] = None) -> str:
@@ -63,16 +108,19 @@ def build_path(path: str, query: Optional[Mapping[str, Any]] = None) -> str:
     ``""`` are dropped rather than sent as empty parameters, which some filters
     would read as "match the empty string" instead of "no filter".
     """
+    gateway_path(path)
     if not query:
         return path
-    pairs = [
-        (key, str(value))
-        for key, value in query.items()
-        if value is not None and value != ""
-    ]
-    if not pairs:
-        return path
-    return f"{path}?{urlencode(pairs)}"
+    pairs = []
+    for key, value in query.items():
+        values = value if isinstance(value, (list, tuple)) else [value]
+        for item in values:
+            if item is not None and item != "":
+                pairs.append(
+                    (str(key), "true" if item is True else "false" if item is False else str(item))
+                )
+    suffix = urlencode(pairs)
+    return gateway_path(path + ("&" if "?" in path else "?") + suffix) if suffix else path
 
 
 def encode_path_segment(value: str) -> str:
@@ -113,7 +161,7 @@ class HttpResponse:
             return None
         try:
             return int(float(raw.strip()))
-        except ValueError:
+        except (ValueError, OverflowError):
             return None
 
     def text(self) -> str:
@@ -165,6 +213,27 @@ class UrllibTransport:
     signature is bound to the exact path that was signed.
     """
 
+    def __init__(
+        self,
+        *,
+        max_response_bytes: int = 8 * 1024 * 1024,
+        ssl_context: Optional[ssl.SSLContext] = None,
+    ) -> None:
+        if ssl_context is not None and (
+            ssl_context.verify_mode != ssl.CERT_REQUIRED or not ssl_context.check_hostname
+        ):
+            raise ConfigurationError(
+                "TLS certificate and hostname verification must remain enabled."
+            )
+        self.max_response_bytes = max_response_bytes
+        self._ssl_context = ssl_context
+
+    def _read(self, response: Any) -> bytes:
+        value = response.read(self.max_response_bytes + 1)
+        if len(value) > self.max_response_bytes:
+            raise TransportError("Gateway response exceeds the configured limit.")
+        return value
+
     def send(
         self,
         method: str,
@@ -178,23 +247,25 @@ class UrllibTransport:
         for key, value in headers.items():
             request.add_header(key, value)
 
-        opener = urllib.request.build_opener(_NoRedirect)
+        opener = urllib.request.build_opener(
+            _NoRedirect, urllib.request.HTTPSHandler(context=self._ssl_context)
+        )
         try:
             with opener.open(request, timeout=timeout) as response:
                 return HttpResponse(
                     status_code=response.status,
                     headers=dict(response.headers.items()),
-                    body=response.read(),
+                    body=self._read(response),
                 )
         except urllib.error.HTTPError as error:
             # An error status is an answer, not a transport failure.
             return HttpResponse(
                 status_code=error.code,
                 headers=dict(error.headers.items()) if error.headers else {},
-                body=error.read() or b"",
+                body=self._read(error),
             )
-        except Exception as error:  # URLError, socket.timeout, ssl errors
-            raise TransportError(str(error) or error.__class__.__name__) from error
+        except Exception:  # URLError, socket.timeout, ssl errors
+            raise TransportError("Gateway transport failed.") from None
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):

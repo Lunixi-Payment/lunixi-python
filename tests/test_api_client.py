@@ -16,9 +16,8 @@ from lunixi.errors import (
     ValidationError,
 )
 
-from .conftest import BASE_URL, KEY_ID, TEST_ACCESS_TOKEN, token_response
+from .conftest import KEY_ID, TEST_ACCESS_TOKEN, token_response
 from .support.recording_transport import (
-    RecordingTransport,
     envelope,
     error_envelope,
     json_response,
@@ -73,7 +72,9 @@ class TestBodySerialization:
 class TestStepUpSigning:
     def test_step_up_adds_the_four_signature_headers_and_the_digest(self, client_factory):
         transport, client = client_factory(json_response(envelope({})))
-        client.api().request("POST", "/api/v1/fraud/events/transactions", {"eventId": "e1"}, step_up=True)
+        client.api().request(
+            "POST", "/api/v1/fraud/events/transactions", {"eventId": "e1"}, step_up=True
+        )
 
         request = transport.last
         for header in ("X-Key-Id", "X-Date", "X-Nonce", "X-Signature", "Digest"):
@@ -169,11 +170,13 @@ class TestErrorMapping:
 
         assert caught.value.code == "FRAUD_CHANNEL_NOT_DECLARABLE"
         assert caught.value.status_code == 400
-        assert "not declarable" in caught.value.message
+        assert "withheld" in caught.value.message
 
     def test_a_403_product_gate_refusal_is_an_authentication_error(self, client_factory):
         transport, client = client_factory(
-            json_response(error_envelope("PRODUCT_NOT_ENABLED", "not enabled", 403), status_code=403)
+            json_response(
+                error_envelope("PRODUCT_NOT_ENABLED", "not enabled", 403), status_code=403
+            )
         )
         with pytest.raises(AuthenticationError) as caught:
             client.api().request("GET", "/api/v1/x")
@@ -305,9 +308,7 @@ class TestRetryPolicy:
         transport, client = client_factory(
             transport_failure(), json_response(envelope({"ok": True}))
         )
-        client.api().request(
-            "POST", "/api/v1/x", {"a": 1}, step_up=True, idempotency_key="idem-1"
-        )
+        client.api().request("POST", "/api/v1/x", {"a": 1}, step_up=True, idempotency_key="idem-1")
 
         first, second = transport.requests_to("/api/v1/x")
         assert first.header("X-Nonce") != second.header("X-Nonce")

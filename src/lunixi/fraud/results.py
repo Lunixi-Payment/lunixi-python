@@ -135,9 +135,11 @@ class EventBatchResult:
         self.inserted: int = _integer(data, "inserted") or 0
         self.deduplicated: int = _integer(data, "deduplicated") or 0
         self.failed: int = _integer(data, "failed") or 0
-        self.results: List[EventResult] = [
-            EventResult(row) for row in rows if isinstance(row, Mapping)
-        ] if isinstance(rows, list) else []
+        self.results: List[EventResult] = (
+            [EventResult(row) for row in rows if isinstance(row, Mapping)]
+            if isinstance(rows, list)
+            else []
+        )
         self.raw: Mapping[str, Any] = data
 
     def failures(self) -> List[EventResult]:

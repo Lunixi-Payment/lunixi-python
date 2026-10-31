@@ -7,7 +7,7 @@ Start with :class:`~lunixi.client.LunixiClient`:
     from lunixi import Channel, LunixiClient
 
     client = LunixiClient(
-        base_url="https://api.lunixi.com",
+        base_url="https://api-gateway.lunixi.com",
         key_id="kid_...",
         private_key=private_key_pem,          # from your secret store
     )
@@ -15,7 +15,7 @@ Start with :class:`~lunixi.client.LunixiClient`:
     decision = client.fraud().evaluate(
         channel=Channel.STANDALONE_API,
         transaction_ref="order-2026-0001",
-        payment={"amount": "149.90", "currency": "TRY"},
+        payment={"amount": 14990, "currency": "TRY"},
     )
     if decision.blocked:
         ...
@@ -62,10 +62,14 @@ from .fraud.taxonomy import (
 )
 from .http.envelope import Page, data_of, is_success, items_of, page_info_of
 from .http.transport import HttpResponse, HttpTransport, TransportError, UrllibTransport
+from .payments import CreateIntent, IntentResult, PaymentsClient
 from .webhook.verifier import WebhookEvent, WebhookVerifier
 
 __all__ = [
     "LunixiClient",
+    "CreateIntent",
+    "IntentResult",
+    "PaymentsClient",
     "Configuration",
     "ApiClient",
     "Ed25519Signer",

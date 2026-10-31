@@ -17,16 +17,16 @@ from lunixi.webhook.verifier import WebhookVerifier
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
-def _headers(vector, signature=None, timestamp=None, event_type="payment.captured"):
+def _headers(vector, signature=None, timestamp=None, event_type=None):
     return {
         "X-Lunixi-Signature": signature or f"v2={vector['expectedV2']}",
         "X-Lunixi-Signature-Timestamp": timestamp or vector["timestamp"],
         "X-Lunixi-Event-Id": vector["eventId"],
-        "X-Lunixi-Event-Type": event_type,
+        "X-Lunixi-Event-Type": event_type or json.loads(vector["rawBody"])["type"],
     }
 
 
-def _fresh(secret, body, event_id="evt-fresh", event_type="fraud.flow.async_completed"):
+def _fresh(secret, body, event_id="evt-fresh", event_type=None):
     """Builds a webhook whose timestamp is inside the tolerance window."""
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
     raw = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -35,11 +35,16 @@ def _fresh(secret, body, event_id="evt-fresh", event_type="fraud.flow.async_comp
         f"{event_id}.{timestamp}.".encode() + raw,
         hashlib.sha256,
     ).hexdigest()
+    try:
+        decoded = json.loads(raw)
+    except ValueError:
+        decoded = {}
+    body_type = decoded.get("type") if isinstance(decoded, dict) else None
     headers = {
         "x-lunixi-signature": f"v2={signature}",
         "x-lunixi-signature-timestamp": timestamp,
         "x-lunixi-event-id": event_id,
-        "x-lunixi-event-type": event_type,
+        "x-lunixi-event-type": event_type or body_type or "fraud.flow.async_completed",
     }
     return raw, headers, signature
 
@@ -257,7 +262,8 @@ class TestVerifiedEvent:
     def test_a_body_without_an_envelope_type_falls_back_to_the_header(self):
         secret = "whsec_test_verifier_0123456789"
         raw, headers, _ = _fresh(secret, '{"data":{}}', event_type="fraud.report.ready")
-        event = WebhookVerifier(secret).verify(raw, headers)
+        event = WebhookVerifier(secret, allow_legacy_header_fields=True).verify(raw, headers)
+        assert event.raw_body_hash is None
         assert event.type == "fraud.report.ready"
         assert event.id == "evt-fresh"
 

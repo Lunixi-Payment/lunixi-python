@@ -25,11 +25,13 @@ from .configuration import Configuration
 from .errors import (
     ApiError,
     AuthenticationError,
+    ConfigurationError,
     RateLimitError,
     ServiceUnavailableError,
     ValidationError,
 )
 from .http.transport import TransportError, build_path, serialize_body
+from .validation import header_value
 
 __all__ = ["ApiClient"]
 
@@ -102,6 +104,54 @@ class ApiClient:
             ServiceUnavailableError: on 503.
             ApiError: on any other non-2xx status, or when no response arrived.
         """
+        if not isinstance(method, str) or method.upper() not in (
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+        ):
+            raise ConfigurationError("Unsupported HTTP method.")
+        if idempotency_key is not None:
+            header_value(idempotency_key, "idempotency_key")
+        if (
+            isinstance(body, Mapping)
+            and path.startswith("/api/v1/payments/")
+            and method.upper() == "POST"
+            and ("price" in body or "paidPrice" in body)
+        ):
+            raise ConfigurationError("Removed amount fields are not accepted; use amount.")
+        financial = path.split("?", 1)[0]
+        financial_write = method.upper() == "POST" and (
+            financial
+            in (
+                "/api/v1/payments/intents",
+                "/api/v1/payments/direct/payment",
+                "/api/v1/payments/split",
+            )
+            or (
+                financial.startswith("/api/v1/payments/")
+                and financial.endswith(("/capture", "/refund", "/void"))
+            )
+        )
+        if financial_write and idempotency_key is None:
+            raise ConfigurationError(
+                "A stable idempotency_key is required for a financial mutation."
+            )
+        amount_route = financial in (
+            "/api/v1/payments/intents",
+            "/api/v1/payments/direct/payment",
+        ) or (
+            financial.startswith("/api/v1/payments/")
+            and financial.endswith(("/capture", "/refund"))
+        )
+        if financial_write and amount_route:
+            from .validation import amount_minor
+
+            if not isinstance(body, Mapping):
+                raise ConfigurationError("Financial mutation requires an integer amount body.")
+            amount_minor(body.get("amount"))
         upper_method = method.upper()
         signed_path = build_path(path, query)
         url = self._config.url_for(signed_path)
@@ -124,18 +174,20 @@ class ApiClient:
                 response = self._config.transport.send(
                     upper_method, url, headers, raw_body, self._config.timeout_seconds
                 )
-            except TransportError as error:
+            except TransportError:
                 if retryable and attempt <= self._config.max_retries:
                     _backoff(attempt)
                     continue
-                raise ApiError(f"Gateway request failed: {error}") from error
+                raise ApiError("Gateway request failed without a confirmed response.") from None
 
+            if len(response.body) > self._config.max_response_bytes:
+                raise ApiError("Gateway response exceeds the configured limit.")
             if response.ok:
                 return response.json()
 
             # One refresh-and-retry for an expired token. Bounded by the flag:
             # a second 401 is the account's answer, not a stale cache.
-            if response.status_code == 401 and not reauthenticated:
+            if response.status_code == 401 and not reauthenticated and retryable:
                 self._tokens.invalidate()
                 reauthenticated = True
                 continue
@@ -157,7 +209,7 @@ class ApiClient:
         headers: Dict[str, str] = {
             "Accept": _JSON_ACCEPT,
             "User-Agent": self._config.user_agent,
-            "Authorization": f"Bearer {self._tokens.get_token()}",
+            "Authorization": f"Bearer {header_value(self._tokens.get_token(), 'access_token', 8192)}",
         }
         if raw_body is not None:
             headers["Content-Type"] = "application/json"
@@ -192,15 +244,13 @@ def _read_quota(response: Any) -> Optional[Dict[str, Optional[int]]]:
 
 def _to_api_error(response: Any) -> ApiError:
     body = response.json()
-    message = body.get("message")
-    if not isinstance(message, str) or message == "":
-        message = f"Gateway request failed (HTTP {response.status_code})."
+    message = f"Gateway request failed (HTTP {response.status_code}); response content withheld."
     code = body.get("code")
 
     kwargs: Dict[str, Any] = {
         "status_code": response.status_code,
         "code": code if isinstance(code, str) and code != "" else None,
-        "response": body,
+        "response": None,
         "request_id": response.header("x-request-id"),
     }
 

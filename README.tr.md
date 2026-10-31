@@ -1,299 +1,72 @@
+<p align="center"><img src=".github/assets/lunixi-logo.svg" alt="Lunixi" width="220"></p>
+
 # Lunixi Python SDK
 
-Lunixi platformu için Python istemcisi. Paylaşılan çekirdeği — Ed25519 istek
-imzalama, jeton alışverişi, yanıt zarfının çözümü, imleçli sayfalama ve tipli
-hata ailesi — ve bunun üzerinde fraud karar ve olay API'sini taşır.
+**0.2.0**, mevcut fraud API'sini koruyarak ödeme API'leri ve kalıcı checkout akışı ekler. SDK senkron çalışır, istemci başına thread güvenlidir ve `py.typed` içerir. Python 3.9+; gerçek Django 6.1.2, FastAPI 0.162.0, Flask 3.1.3 örnekleri/testleri Python 3.12+ gerektirir. Kriptografi `cryptography`, JavaScript sayı yazımı `rfc8785`, HTTP/SQLite standart kütüphane üzerinden sağlanır.
 
-English: [README.md](README.md)
+[English](README.md) · [Framework rehberi](docs/FRAMEWORKS.tr.md) · [Django](docs/DJANGO.tr.md) · [FastAPI](docs/FASTAPI.tr.md) · [Flask](docs/FLASK.tr.md)
 
-- **Gereksinim:** Python 3.9 veya üzeri
-- **Bağımlılık:** Ed25519 için
-  [`cryptography`](https://pypi.org/project/cryptography/). HTTP standart
-  kütüphaneyle yapılır, başka bir paket gelmez.
-- **Tipli:** `py.typed` içerir; tüm açık arayüz tip ipuçlarıyla gelir.
-- **Lisans:** MIT
+## Kurulum ve ödeme
 
-```bash
-pip install lunixi-sdk
+GitHub kaynak etiketi, PyPI yayını yapıldığı anlamına gelmez:
+
+```sh
+pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.0"
 ```
 
-## Hızlı başlangıç
-
 ```python
-from lunixi import Channel, Decision, LunixiClient
-
+import os
+from lunixi import LunixiClient, CreateIntent
 client = LunixiClient(
-    base_url="https://api.lunixi.com",
-    key_id="kid_...",                     # panelden alırsınız
-    private_key=private_key_pem,          # sır kasanızdan okuyun
+    base_url="https://api-gateway.lunixi.com",
+    key_id=os.environ["LUNIXI_KEY_ID"],
+    private_key=os.environ["LUNIXI_PRIVATE_KEY"],
+    max_retries=0,
 )
-
-decision = client.fraud().evaluate(
-    channel=Channel.STANDALONE_API,
-    transaction_ref="order-2026-0001",
-    payment={"amount": "149.90", "currency": "TRY"},
-    customer={"id": "cus_88", "email": "alici@example.com"},
+intent = client.payments().create_intent(
+    CreateIntent(1990, "TRY", "kalici-siparis-123",
+                 callback_url="https://magaza.example/return/123"),
+    idempotency_key=veritabaninda_saklanan_deneme_anahtari,
 )
-
-if decision.blocked:
-    siparisi_reddet(decision.reasons)
-elif decision.requires_three_d:
-    uc_d_ile_tekrar_dene()
-elif decision.requires_review:
-    incelemeye_al(decision.trace_id)
-else:
-    yetkilendir()
+# Önce kullanıcı/sipariş sahipliği doğrulanmalıdır:
+form_config = intent.browser_config()
+yonlendirme = intent.hosted_url
 ```
 
-İstemciyi uygulama açılışında bir kez kurup paylaşın: erişim jetonu önbelleği
-bu nesnede durur, dolayısıyla her istek için yeni bir istemci kurmak her istek
-için yeni bir jeton alışverişi anlamına gelir.
+Tutarlar tam sayı küçük birimdir; float, bool, sıfır ve eski üst düzey tutar alanları ağdan önce reddedilir. `minor_units('19.90','TRY')` tam ondalık dönüşüm yapar; JPY 0, KWD 3, desteklenen diğer para birimleri2 basamaklıdır. `preauth=True` yalnız ön provizyon açar; sipariş ödenmiş sayılmaz. Taksit, uygun yemek kartı/alışveriş kredisi, sigorta ve çoklu kart Lunixi panel/form ayarlarıyla yönetilir. Örnekler kart numarası/CVV toplamaz.
 
-## Kimlik doğrulama
+`payments()` yardımcıları: `create_intent`, `get`, `list`, `capture`, `refund`, `void`, `methods`, `get_split`, `list_splits`, `refund_split`. Finansal işlemler kalıcı `idempotency_key` ister. Intent dışındaki yanıtlar tüm gateway zarfını korur; `details`, `pageInfo`, request ID kaybolmaz. API'de intent yanıtı `paymentId`/`token`, ödeme sorgusu `data.id`, webhook `data.intentId` kullanır. Yalnız HTTP 2xx finansal kesinlik değildir.
 
-İki düzey vardır ve birbirinin yerine geçmezler.
+## Kalıcı sipariş akışı
 
-**Jeton alışverişi.** `POST /api/v1/auth/token` Ed25519 özel anahtarınızla
-imzalanır ve kısa ömürlü bir erişim jetonu döndürür. SDK bunu sizin yerinize
-yapar, jetonu önbelleğe alır ve gateway jetonun süresi dolduğunu bildirdiğinde
-bir kez yeniler.
+`lunixi.commerce.CheckoutService`, merchant/sipariş/tutar/para birimi izini ve sabit deneme anahtarını ağ çağrısından **önce** kaydeder. Tarayıcı token'ını bağımsız32 bayt anahtarla şifreler. Native callback, güncel sipariş tutarını/teslim blokesini denetleyip **aynı bağlantı ve transaction** içinde sipariş, stok ve bildirim kuyruğunu güncellemelidir. [Çalışan framework örnekleri](docs/FRAMEWORKS.tr.md) bunu gerçek veritabanlarıyla uygular.
 
-**İstek başına imza.** Olay alım uçları her çağrıda imza ister: olayı
-hesabınıza bağlayan şey imzadır, bu yüzden gövdedeki bir değer başka bir
-hesabı iddia edemez. SDK imzayı gereken yerde ekler.
+`service.webhook(raw, headers, secret, apply_native)` ham gövde v2 HMAC, zaman ve imzalı id/type kontrolünden sonra kimlik doğrulamalı ödeme/çoklu kart sorgusunu değerlendirir. Kalıcı olay tüketimi ile sipariş değişikliği birlikte commit/rollback olur; eşzamanlı/tekrarlanan olay stoktan iki kez düşmez. Tarayıcı dönüşü/query parametresi/form olayı ödeme kanıtı değildir. Kayıp intent yanıtı yalnız imzalı webhook ve özgün rezervasyon izini doğrulayan GET ile toparlanır; bağlı ödeme kimliği değiştirilmez.
 
-İmzalanan kanonik dizge şudur:
+Kısmi tahsilat veya eksik çoklu kart üst ödemesi teslimi başlatmaz. Vade farkı sipariş iziyle kanıtlanıp sepetten ayrı tutulur. Yerel fraud/manual teslim blokesi korunur. Sonradan tutarı/para birimi değişen sipariş eski ödeme ile tamamlanamaz. `FAILED` sonucu kesinlik kanıtı taşımıyorsa incelemede kalır; belirsiz deneme otomatik sıfırlanmaz.
 
-```text
-<METHOD>\n<URL>\nX-Date:<değer>\nX-Nonce:<değer>[\nDigest:<değer>]
+`service.mutate(order_key, kalici_islem_id, action, amount, apply_native)` ile tahsilat/iade/iptal yürütülür. `operation_status(...)` sonucundaki `pending`/`uncertain` başarı değildir; istenen bakiye hareketi GET ile doğrulanınca `confirmed` olur. Önceki işlem çözülmeden farklı kimlik açılamaz. İade gerçekten tahsil edileni aşamaz.23 saati aşan teyitsiz create/mutation tekrarları gateway anahtar saklama süresi nedeniyle engellenir; GET uzlaştırma açık kalır. Zaman aşımında aynı kimlik ve tutarı kullanın.
+
+## Güvenlik ve mevcut fraud yüzeyi
+
+İstemciyi origin/merchant key başına bir kez kurup paylaşın. Varsayılan cache eşzamanlı token yenilemeyi birleştirir; özel `TokenStore` origin/key'e göre ayrılmalıdır. PKCS8 PEM/DER, base64/hex seed ve doğrulanan64 bayt seed/public anahtar biçimleri desteklenir. Özel anahtar config çıktısına yazılmaz. HTTPS zorunludur; origin kullanıcı bilgisi/path/query/fragment içeremez, API yolları kaçamaz, yönlendirmeler takip edilmez. Yanıt boyutu/süre/tekrar sınırları vardır; yalnız sabit anahtarlı finansal istek yeniden gönderilebilir. Gövde JavaScript anahtar/sayı yazımıyla imzalanır.
+
+`fraud().evaluate`, decision log liste/get ve event record/batch yöntemleri korunur. Karar/log Bearer, olay alımı istek başına Ed25519 imzası kullanır.500 olay sınırı ve kısmi batch hataları korunur; hata kayıtlarını aynı event ID ile tekrar gönderin. Generic `client.api().request(..., step_up=True)` diğer belgelenmiş merchant servislerine erişebilir; bu sürüm KYC/identity/sanction/wallet/insurance/bank-connect/subscription/direct-card/split-initiation için tipli akış iddiasında bulunmaz.
+
+Hatalarda sınıf, kod, HTTP durum, request ID ve kota bilgisi kullanılır; uzak hata gövdesi/mesajı ve transport metni saklanır. Ham başarılı yanıtlarda da token/müşteri verisi bulunabilir, loglamayın. Düşük seviye webhook doğrulayıcısı tek başına replay tüketmez; native transaction gerekir. Eski imzasız header alanı fallback'i yalnız açık `allow_legacy_header_fields=True` ile finansal olmayan eski kullanım içindir; sipariş akışında kabul edilmez. `tolerance_seconds=None` yalnız çevrimdışı test seçeneğidir. Secret listesi rotasyona izin verir.
+
+## Test ve dağıtım
+
+```sh
+pip install -r requirements-dev.lock
+pip install --no-deps -e .
+ruff check src integrations tests
+ruff format --check src integrations tests
+mypy src/lunixi
+bandit -r src/lunixi integrations -q
+pip-audit
+pytest -q
+python -m build
 ```
 
-`<URL>`, gönderildiği hâliyle yoldur: **`/api/v1` öneki ve varsa sorgu dizgesi
-dahil**. `Digest` satırı yalnız gövde varken eklenir.
-
-### Anahtar yönetimi
-
-Anahtar çiftini kendiniz üretip yalnız açık anahtarı yükleyebilirsiniz; böylece
-özel anahtar sizin sistemlerinizin dışına hiç çıkmaz:
-
-```python
-from lunixi import generate_key_pair
-
-private_pem, public_pem = generate_key_pair()
-# private_pem'i sır kasanıza koyun; public_pem'i panelden yükleyin
-```
-
-Kabul edilen özel anahtar biçimleri: PKCS#8 PEM bloğu (önerilen), base64 veya
-hex PKCS#8 DER, ya da çıplak 32 baytlık tohum. Anahtarı sır kasanızdan okuyun;
-kaynak koda ve depodaki bir dosyaya koymayın.
-
-## Fraud
-
-Müşteriye açık yüzey **beş uçtan** oluşur:
-
-| Çağrı | Uç |
-|---|---|
-| `fraud().evaluate(...)` | `POST /api/v1/fraud/decisions/evaluate` |
-| `fraud().decisions.list(...)` | `GET /api/v1/fraud/decision-logs` |
-| `fraud().decisions.get(trace_id)` | `GET /api/v1/fraud/decision-logs/{traceId}` |
-| `fraud().events.record(event)` | `POST /api/v1/fraud/events/transactions` |
-| `fraud().events.record_batch(events)` | `POST .../events/transactions/batch` |
-
-Panelin kendi uçları bu yüzeyin parçası değildir. Kararlılık güvencesi
-taşımadıkları için burada yayımlanmazlar.
-
-### Karar sonuçları
-
-`allow`, `review`, `block`, `force_3d`. Dikkat: `allowed`, `blocked`'ın tersi
-**değildir**. `review` ve `force_3d` ikisi de değildir; `force_3d` ödemeyi
-reddetmez, 3-D Secure ile yeniden denemenizi ister.
-
-Alan adları Python'un `snake_case` biçimindedir; API referansındaki
-`camelCase` yazım da takma ad olarak kabul edilir. Tanınmayan bir alan yerelde
-hata verir ve hangi anahtarın yanlış olduğunu söyler; bunu öğrenmek için bir
-gidiş-dönüş harcamanız gerekmez.
-
-`tenant_id` bilinçli olarak yoktur: kiracı erişim jetonunuzdan damgalanır ve
-gövdedeki değer yok sayılır.
-
-### Olay alımı
-
-Olaylar, sayma kurallarının okuduğu geçmişi oluşturur.
-
-```python
-result = client.fraud().events.record(
-    {
-        "eventId": "evt-0001",          # sizin kimliğiniz; aynı kimlikle tekrar güvenlidir
-        "eventType": "card_sale",
-        "subjectType": "customer",
-        "occurredAt": "2026-10-11T08:29:00Z",
-    },
-    idempotency_key="evt-0001",
-)
-if result.deduplicated:
-    ...  # bu olay zaten kaydedilmişti
-```
-
-Bir parti en çok **500** olay taşır; SDK daha büyüğünü ağa çıkmadan reddeder,
-çünkü gateway partinin tamamını geri çevirir.
-
-**Parti kısmen başarılı olabilir.** Bir olay doğrulamadan geçmediğinde uç
-`200` yanıtlar ve kalan olayları işlemeye devam eder; yani durum kodu tek
-başına partinin yerine oturduğunu kanıtlamaz:
-
-```python
-result = client.fraud().events.record_batch(events, idempotency_key="feed-2026-10-11-01")
-for failure in result.failures():
-    log.warning("olay %s reddedildi: %s", failure.event_id, failure.error)
-```
-
-Gövdeyi düzeltip reddedilen olayı **aynı** `eventId` ile tekrar gönderin:
-gateway tekrarı ayıkladığı için, yerine oturmuş bir olay ikinci kez sayılmaz.
-
-## Yanıtı okumak
-
-Başarılı her yanıt sarmalanır:
-
-```json
-{ "status": "success", "code": "SUCCESS", "data": {}, "pageInfo": {}, "requestId": "..." }
-```
-
-Zarfı kendiniz okuyacaksanız iki noktayı bilmeniz gerekir:
-
-- **`success` alanı yoktur.** Sonuç `status` alanında, `"success"` dizgesi
-  olarak gelir. `response["success"]` okuyan kod her yanıtta `None` görür.
-  `lunixi.is_success(response)` kullanın.
-- **`pageInfo`, `data`'nın kardeşidir**, içinde değil. Liste uçları `data`'yı
-  çıplak dizi olarak döndürür, dolayısıyla sayfalama bilgisi onun içinde
-  duramaz.
-
-Özellik istemcileri bu ikisini sizin yerinize halleder.
-
-## Sayfalama
-
-```python
-page = client.fraud().decisions.list(decision=Decision.REVIEW, limit=50)
-while True:
-    for row in page.items:
-        isle(row)
-    if not page.has_more or not page.next_cursor:
-        break
-    page = client.fraud().decisions.list(
-        decision=Decision.REVIEW, limit=50, cursor=page.next_cursor
-    )
-```
-
-Ya da imleçleri SDK'ya takip ettirin:
-
-```python
-for row in client.fraud().decisions.iterate(decision=Decision.REVIEW, limit=50):
-    isle(row)
-```
-
-İmleç opaktır: aynen geri gönderin. Çözmeyin, üretmeyin, değiştirmeyin —
-bozuk imleç `400` ile reddedilir, sessizce ilk sayfaya dönmez. `total_count`,
-sunucu gerçekten saymadıkça `None`'dır; filtreli sayım pahalıdır.
-
-## Hatalar
-
-Tüm hatalar `LunixiError`'dan türer.
-
-| Sınıf | Ne zaman |
-|---|---|
-| `ConfigurationError` | Yerel bir değer kullanılamaz; hiçbir şey gönderilmedi. |
-| `SignatureError` | Özel anahtar yüklenemedi. |
-| `ValidationError` | `400` — gateway gövdeyi reddetti. |
-| `AuthenticationError` | `401` / `403` — imza, jeton veya yetki reddedildi. |
-| `RateLimitError` | `429` — `retry_after` ve `quota` taşır. |
-| `ServiceUnavailableError` | `503` — `retry_after` taşır. |
-| `ApiError` | Diğer 2xx olmayan yanıtlar ya da hiç yanıt gelmemesi. |
-| `WebhookVerificationError` | Gelen webhook doğrulanmadı. |
-
-Gateway başlığı göndermediğinde `retry_after` ve kota alanları `None` olur.
-Gateway tahmin etmek yerine başlığı atlar; bu SDK da öyle yapar — uydurulmuş
-bir sayı yanlış hızda yeniden denemenize yol açardı.
-
-```python
-from lunixi import RateLimitError
-
-try:
-    client.fraud().events.record(event, idempotency_key=event["eventId"])
-except RateLimitError as error:
-    sleep(error.retry_after or 30)
-```
-
-### Yeniden denemeler
-
-`GET` istekleri ve `idempotency_key` verdiğiniz her istek, taşıma hatası veya
-`5xx` sonrası yeniden denenir. Diğerleri denenmez: SDK kayıp isteği kayıp
-yanıttan ayırt edemez ve anahtarsız bir yazmayı tekrarlamak aynı olayı iki kez
-kaydedebilir.
-
-`evaluate` kendiliğinden yeniden denenmez. Ödeme akışınızın içinde koştuğu
-için, zaman aşımına uğrayan bir kararın yeniden denenmesi mi, yumuşak geçiş
-sayılması mı, yoksa bekletilmesi mi gerektiği sizin kararınızdır.
-
-## Webhook'lar
-
-```python
-from lunixi import FraudEvents, WebhookVerifier, WebhookVerificationError
-
-verifier = WebhookVerifier(endpoint_secret)
-
-try:
-    event = verifier.verify(raw_body, request.headers)
-except WebhookVerificationError:
-    return 400                     # doğrulanmamış yük üzerinde asla işlem yapmayın
-
-if event.type == FraudEvents.FLOW_ASYNC_COMPLETED:
-    ...
-```
-
-**Ham gövdeyi verin.** İmza, gelen baytların tam olarak kendisini kapsar;
-JSON'u çözüp yeniden üretmek anahtar sırasını ve boşlukları değiştirir ve o
-andan sonra her webhook doğrulamadan geçemez. Ham gövdeyi, herhangi bir JSON
-ara katmanı ona dokunmadan önce yakalayın.
-
-Doğrulama fail-closed çalışır ve varsayılan olarak 300 saniyelik pencerede
-zaman damgası tazeliğini de denetler. Sır değişimi sırasında gateway iki imza
-öğesi gönderir; birinin doğrulanması yeterlidir, böylece sırları değiştirirken
-ucunuz çalışmaya devam eder.
-
-Yedi fraud olay tipi `FraudEvents` içindedir; `FRAUD_EVENT_TYPES` hepsini
-tutar.
-
-## Genişletme
-
-Bu sürümün sarmaladığı uçların dışındaki her gateway ucuna, imzalama,
-yeniden deneme ve hata işleme hazırken erişebilirsiniz:
-
-```python
-envelope = client.api().request(
-    "GET", "/api/v1/some/other/route", query={"limit": 25}
-)
-rows = lunixi.items_of(envelope)
-```
-
-Kendi HTTP yığınınızı (bağlantı havuzu, vekil sunucu veya izleme için)
-`HttpTransport` arayüzünü uygulayıp `transport=` ile verebilirsiniz. Çok
-süreçli bir kurulumda `TokenStore` arayüzünü paylaşılan bir önbellek üzerinde
-uygulayıp `token_store=` ile verin; böylece süreçler tek jetonu paylaşır.
-
-## Geliştirme
-
-```bash
-python -m venv .venv
-.venv/bin/pip install -e ".[dev]"
-.venv/bin/python -m pytest
-```
-
-Süit tamamen çevrimdışı koşar: enjekte edilen bir taşıma katmanı üzerinden
-SDK'nın tele ne koyduğunu ölçer, imzalama ve webhook mantığını depodaki
-vektörlere karşı doğrular. İçindeki her anahtar sentetiktir ve hiçbir yere
-erişim vermez.
-
-## Örnekler
-
-Koşturulabilir örnekler [`samples/`](samples/) altındadır. Her biri
-ayarlarını ortam değişkenlerinden okur; böylece hiçbir kimlik bilgisi dosyaya
-yazılmaz.
+Kilitli ortam Python 3.12 içindir. Testler gerçek framework kullanıcı/CSRF/ORM/istemcilerini ve veritabanını kullanır; dış gateway sentetiktir. HTTPS testi yalnız loopback üzerinde dinler. Canlı tahsilat, dış e-posta veya otomatik sevkiyat yapılmaz. Wheel SDK'yı; sdist/kaynak çalışan uygulamaları, testleri, özgün logoları ve EN/TR belgeleri içerir. [Güvenlik](SECURITY.md), [katkı](CONTRIBUTING.md) ve [değişiklikler](CHANGELOG.md). MIT.

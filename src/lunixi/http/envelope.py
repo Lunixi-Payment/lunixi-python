@@ -135,7 +135,9 @@ class Page(Generic[T]):
             next_cursor if isinstance(next_cursor, str) and next_cursor != "" else None
         )
         self.total_count: Optional[int] = (
-            total_count if isinstance(total_count, int) and not isinstance(total_count, bool) else None
+            total_count
+            if isinstance(total_count, int) and not isinstance(total_count, bool)
+            else None
         )
         self.raw: Mapping[str, Any] = response
 
