@@ -82,7 +82,7 @@ def create_app(
                     hold=bool(row["fulfillment_hold"]),
                     nonce=nonce,
                 ),
-                headers=security_headers(nonce),
+                headers=security_headers(nonce, settings.form_action_origins),
             )
         except (LunixiError, KeyError):
             return JSONResponse({"error": "checkout_unavailable"}, status_code=403)

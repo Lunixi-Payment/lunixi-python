@@ -2,7 +2,8 @@ name: Publish to PyPI
 
 # Publishes with PyPI Trusted Publishing (OIDC): PyPI accepts the upload from
 # this workflow of this repository only, and no API token is stored anywhere.
-# Runs when a GitHub release is published, or by hand for an existing tag.
+# Runs when a GitHub release is published, or manually FROM its existing tag.
+# OIDC attestations must identify the same source as the built distributions.
 
 on:
   release:
@@ -10,39 +11,119 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to publish (vX.Y.Z)
+        description: Release tag to publish (vX.Y.Z); select that same tag above
         required: true
+        default: v0.2.1
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: publish-pypi-lunixi-sdk
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build distribution
+    if: github.repository == 'Lunixi-Payment/lunixi-python'
     runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      tag: ${{ steps.source.outputs.tag }}
+      version: ${{ steps.source.outputs.version }}
+      receipt_sha256: ${{ steps.receipt.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Require the invocation and public tag to identify the same source
+        id: source
+        env:
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, urllib.request
+          tag = os.environ['TAG']
+          assert re.fullmatch(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', tag), 'Invalid numeric release tag'
+          assert os.environ['GITHUB_REPOSITORY'] == 'Lunixi-Payment/lunixi-python'
+          assert os.environ['GITHUB_REF'] == 'refs/tags/' + tag, 'Manual dispatch must use the exact release tag, not main'
+          event = os.environ['GITHUB_EVENT_NAME']
+          assert event in {'workflow_dispatch', 'release'}
+          if event == 'release':
+              with open(os.environ['GITHUB_EVENT_PATH']) as payload_file:
+                  payload = json.load(payload_file)
+              assert payload['action'] == 'published' and payload['release']['tag_name'] == tag
+          def api(path):
+              request = urllib.request.Request('https://api.github.com/repos/Lunixi-Payment/lunixi-python/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          obj = api('git/ref/tags/' + tag)['object']
+          for _ in range(4):
+              assert re.fullmatch(r'[0-9a-f]{40}', obj['sha'])
+              if obj['type'] == 'commit':
+                  break
+              assert obj['type'] == 'tag'
+              obj = api('git/tags/' + obj['sha'])['object']
+          assert obj['type'] == 'commit' and obj['sha'] == os.environ['GITHUB_SHA'], 'Tag moved or invocation source differs'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('source_sha=' + obj['sha'] + '\ntag=' + tag + '\nversion=' + tag[1:] + '\n')
+          print('Exact release invocation and immutable public source verified.')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || github.ref }}
-      - uses: actions/setup-python@v5
+          ref: ${{ steps.source.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.12'
       - name: Tag and package version agree
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ steps.source.outputs.tag }}
         run: |
-          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          if [ "$TAG" != "v$VERSION" ]; then
-            echo "Tag $TAG does not match pyproject.toml version $VERSION" >&2
-            exit 1
-          fi
+          set -euo pipefail
+          python - <<'PY'
+          import os, tomllib
+          with open('pyproject.toml', 'rb') as manifest:
+              project = tomllib.load(manifest)['project']
+          assert project['name'] == 'lunixi-sdk' and os.environ['TAG'] == 'v' + project['version'], 'Tag and package identity differ'
+          PY
       - run: python -m pip install --upgrade build twine
       - run: python -m build
       - run: python -m twine check dist/*
-      - uses: actions/upload-artifact@v4
+      - run: python tools/check_distribution.py
+      - name: Record exact distribution hashes and source
+        id: receipt
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          VERSION: ${{ steps.source.outputs.version }}
+          TAG: ${{ steps.source.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib
+          version = os.environ['VERSION']
+          directory = pathlib.Path('dist')
+          files = sorted(directory.iterdir())
+          assert [p.name for p in files] == ['lunixi_sdk-' + version + '-py3-none-any.whl', 'lunixi_sdk-' + version + '.tar.gz']
+          assert all(p.is_file() and not p.is_symlink() for p in files)
+          receipt = {'name': 'lunixi-sdk', 'version': version, 'tag': os.environ['TAG'], 'sourceSha': os.environ['SOURCE_SHA'],
+              'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}}
+          content = (json.dumps(receipt, sort_keys=True) + '\n').encode()
+          pathlib.Path('publication-receipt.json').write_bytes(content)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sha256=' + hashlib.sha256(content).hexdigest() + '\n')
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
           path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: publication-receipt
+          path: publication-receipt.json
+          if-no-files-found: error
 
   publish:
     name: Upload to PyPI
@@ -54,8 +135,40 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: publication-receipt
+          path: receipt/
+      - name: Verify unchanged distributions and attested source before publication
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          TAG: ${{ needs.build.outputs.tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+          RECEIPT_SHA256: ${{ needs.build.outputs.receipt_sha256 }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re
+          tag, version, sha = os.environ['TAG'], os.environ['VERSION'], os.environ['SOURCE_SHA']
+          assert re.fullmatch(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', tag) and tag == 'v' + version
+          assert re.fullmatch(r'[0-9a-f]{40}', sha) and sha == os.environ['GITHUB_SHA']
+          assert os.environ['GITHUB_REPOSITORY'] == 'Lunixi-Payment/lunixi-python' and os.environ['GITHUB_REF'] == 'refs/tags/' + tag
+          content = pathlib.Path('receipt/publication-receipt.json').read_bytes()
+          assert hashlib.sha256(content).hexdigest() == os.environ['RECEIPT_SHA256']
+          receipt = json.loads(content)
+          directory = pathlib.Path('dist')
+          expected = ['lunixi_sdk-' + version + '-py3-none-any.whl', 'lunixi_sdk-' + version + '.tar.gz']
+          assert sorted(p.name for p in directory.iterdir()) == expected
+          assert all((directory / name).is_file() and not (directory / name).is_symlink() for name in expected)
+          assert receipt == {'name': 'lunixi-sdk', 'version': version, 'tag': tag, 'sourceSha': sha,
+              'files': {name: hashlib.sha256((directory / name).read_bytes()).hexdigest() for name in expected}}
+          print('Exact built wheel/sdist and invocation source verified.')
+          PY
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # official v1.14.3
+        with:
+          packages-dir: dist/
+          attestations: true

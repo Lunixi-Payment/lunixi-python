@@ -10,12 +10,12 @@ build-backend = "setuptools.build_meta"
 #
 #   distribution name : lunixi-sdk      → `pip install lunixi-sdk`
 #   import name       : lunixi          → `from lunixi import LunixiClient`
-#   version           : 0.2.0           → payment + fraud source release
+#   version           : 0.2.1           → payment + fraud source release
 #   minimum Python    : 3.9
 # ─────────────────────────────────────────────────────────────────────────────
 [project]
 name = "lunixi-sdk"
-version = "0.2.0"
+version = "0.2.1"
 description = "Lunixi payment and fraud SDK with Ed25519 authentication, verified webhooks and durable native checkout orchestration."
 readme = "README.md"
 requires-python = ">=3.9"

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 — 2026-10-31
+
+- Default Django, FastAPI and Flask examples to the existing on-site Lunixi form; retain explicit hosted mode.
+- Read and strictly validate the backend `paymentPageUrl` independently of the embedded browser token; never derive a hosted URL from the token.
+- Persist the optional URL encrypted with a field-specific context, validate it on cache reads, and preserve legacy request hashes/keys without unsafe retries or token-URL fallbacks.
+- Preserve nonce CSP while allowing exact operator-approved HTTPS form-action origins for provider/legacy POSTs; reject unsafe origin configuration before use.
+
+
 ## 0.2.0 —2026-10-31
 
 - Typed payment intents/read/list/capture/refund/void/methods and split read/list/refund helpers; existing fraud API preserved.

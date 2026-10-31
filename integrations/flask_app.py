@@ -76,7 +76,7 @@ def create_app(settings: Optional[Settings] = None, client: Optional[LunixiClien
                     hold=bool(row["fulfillment_hold"]),
                     nonce=nonce,
                 ),
-                headers=security_headers(nonce),
+                headers=security_headers(nonce, settings.form_action_origins),
                 mimetype="text/html",
             )
         except (LunixiError, KeyError):

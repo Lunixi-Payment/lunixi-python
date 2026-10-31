@@ -8,14 +8,19 @@ from django.middleware.csrf import get_token
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from integrations.common import callback_post_allowed, checkout_page, security_headers
+from integrations.common import (
+    DEFAULT_FORM_ACTION_ORIGINS,
+    callback_post_allowed,
+    checkout_page,
+    security_headers,
+)
 from lunixi import LunixiError
 
 from .service import get_orders
 
 
-def secure(response, nonce=None):
-    for key, value in security_headers(nonce).items():
+def secure(response, nonce=None, form_origins=DEFAULT_FORM_ACTION_ORIGINS):
+    for key, value in security_headers(nonce, form_origins).items():
         response[key] = value
     return response
 
@@ -42,6 +47,7 @@ def checkout(request, key):
                 )
             ),
             nonce,
+            orders.settings.form_action_origins,
         )
     except LunixiError:
         return secure(

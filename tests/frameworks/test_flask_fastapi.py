@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 
 import pytest
 
+from lunixi.commerce import CommerceError
 from tests.test_commerce import fresh_event
 
 
@@ -85,7 +87,9 @@ def test_native_checkout_browser_return_is_not_payment_and_signed_webhook_is(web
     nonce = csrf(web, key)
     response = web.post("/checkout/" + key, headers={"X-CSRF-Token": nonce})
     assert response.status_code == 200
-    assert web.json(response)["redirect"].startswith("https://pay.lunixi.com/payment/")
+    assert web.json(response)["config"]["type"] == "payment"
+    assert "synthetic_browser_token" in web.json(response)["config"]["options"]["token"]
+    assert "redirect" not in web.json(response)
     assert "PRIVATE KEY" not in web.text(response)
     assert web.post("/return/" + key, body=b"status=success&success=true").status_code == 303
     assert web.orders.owned(key, "owner")["state"] == "pending"
@@ -129,3 +133,60 @@ def test_native_callback_rollback_retries_and_manual_hold(web, monkeypatch):
     assert connection.execute("SELECT COUNT(*) FROM sample_outbox").fetchone()[0] == 1
     connection.close()
     assert web.post("/webhook", body=b"x" * (1024 * 1024 + 1)).status_code == 413
+
+
+def test_optional_hosted_uses_exact_backend_url_without_replacing_attempt(web):
+    web, gateway = web
+    web.orders.settings = replace(web.orders.settings, mode="hosted")
+    key, token = web.orders.seed("owner")
+    web.get("/claim/" + token)
+    nonce = csrf(web, key)
+    response = web.post("/checkout/" + key, headers={"X-CSRF-Token": nonce})
+    assert response.status_code == 200
+    assert web.json(response) == {"redirect": gateway.payment_page_url}
+    record = web.orders.service._load(key)
+    assert gateway.payment_page_url not in record["paymentPageUrl"]
+    calls = len(gateway.calls)
+    web.orders.settings = replace(web.orders.settings, mode="embedded")
+    assert web.post("/checkout/" + key, headers={"X-CSRF-Token": nonce}).status_code == 409
+    assert web.orders.service._load(key)["key"] == record["key"]
+    assert len(gateway.calls) == calls
+
+
+def test_rendered_checkout_csp_permits_only_default_gateway_form_posts(web):
+    web, gateway = web
+    key, token = web.orders.seed("owner")
+    web.get("/claim/" + token)
+    page = web.get("/checkout/" + key)
+    assert page.status_code == 200
+    policy = page.headers["Content-Security-Policy"]
+    directives = dict(part.strip().split(" ", 1) for part in policy.split(";") if part.strip())
+    assert directives["form-action"] == "'self' https://api-gateway.lunixi.com"
+    nonce = re.search(r'<script[^>]*nonce="([^"]+)"', web.text(page)).group(1)
+    assert "'nonce-" + nonce + "'" in directives["script-src"]
+    assert directives["frame-ancestors"] == "'none'"
+    assert page.headers["Referrer-Policy"] == "no-referrer"
+    assert gateway.calls == []
+
+
+@pytest.mark.parametrize("kind", ["flask", "fastapi"])
+def test_operator_form_origins_are_rendered_and_malicious_config_fails_closed(kind, payment_setup):
+    orders, gateway = payment_setup
+    if kind == "flask":
+        from integrations.flask_app import create_app
+    else:
+        from integrations.fastapi_app import create_app
+    origins = ("https://api-gateway.lunixi.com", "https://provider.example:8443")
+    settings = replace(orders.settings, form_action_origins=origins)
+    web = Web(kind, create_app(settings, orders.service.client))
+    key, token = web.orders.seed("owner")
+    web.get("/claim/" + token)
+    page = web.get("/checkout/" + key)
+    assert page.status_code == 200
+    assert "form-action 'self' " + " ".join(origins) in page.headers["Content-Security-Policy"]
+    with pytest.raises(CommerceError, match="Form actions require"):
+        create_app(
+            replace(settings, form_action_origins=("https://safe.example;form-action https:",)),
+            orders.service.client,
+        )
+    assert gateway.calls == []

@@ -8,8 +8,13 @@ import zipfile
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-wheel = next((root / "dist").glob("lunixi_sdk-0.2.0-*.whl"))
-sdist = root / "dist/lunixi_sdk-0.2.0.tar.gz"
+match = re.search(
+    r'^version = "([0-9]+\.[0-9]+\.[0-9]+)"$', (root / "pyproject.toml").read_text(), re.M
+)
+assert match is not None, "Release metadata requires a semantic version"
+version = match.group(1)
+wheel = next((root / "dist").glob(f"lunixi_sdk-{version}-*.whl"))
+sdist = root / f"dist/lunixi_sdk-{version}.tar.gz"
 with zipfile.ZipFile(wheel) as archive:
     names = archive.namelist()
     assert "lunixi/payments/__init__.py" in names

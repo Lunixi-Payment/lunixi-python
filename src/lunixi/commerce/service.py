@@ -94,6 +94,7 @@ class CheckoutService:
                     "createdAt": self.clock(),
                     "state": "reserved",
                     "paymentId": "",
+                    "paymentPageUrl": "",
                 }
                 tx.save(record)
             elif record.get("requestHash") != digest:
@@ -112,7 +113,12 @@ class CheckoutService:
         if record["paymentId"] and record.get("token"):
             if self.clock() - record["createdAt"] >= 840:
                 raise CommerceError("Checkout token expired; reconcile before another attempt.")
-            return IntentResult(record["paymentId"], self.box.decrypt(record["token"], key))
+            page_url = record.get("paymentPageUrl", "")
+            return IntentResult(
+                record["paymentId"],
+                self.box.decrypt(record["token"], key),
+                self.box.decrypt(page_url, key + ":paymentPageUrl") if page_url else "",
+            )
         self._window(record.get("createdAt"))
         metadata["lunixiCommerce"]["attempt"] = _hash(record["key"])
         result = self.client.payments().create_intent(request, idempotency_key=record["key"])
@@ -126,6 +132,11 @@ class CheckoutService:
                 raise CommerceError("Concurrent checkout identity changed.")
             current["paymentId"] = result.payment_id
             current["token"] = self.box.encrypt(result.token, key)
+            current["paymentPageUrl"] = (
+                self.box.encrypt(result.payment_page_url, key + ":paymentPageUrl")
+                if result.payment_page_url
+                else ""
+            )
             if current["state"] == "reserved":
                 current["state"] = "pending"
             tx.save(current)

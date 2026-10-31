@@ -1,6 +1,6 @@
 # Çalışan framework entegrasyonları
 
-SDK’nın **0.2.0** sürümü [PyPI’den](https://pypi.org/project/lunixi-sdk/0.2.0/) `pip install lunixi-sdk==0.2.0` ile kurulur. Aşağıdaki uygulamalar ve kilitli geliştirme ortamı için [v0.2.0 kaynak kodunu](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.0) kullanın; framework örnekleri ayrı paket kayıtları değildir.
+Güncel **0.2.1 kaynak sürümünü** ve kilitli örnek ortamını [v0.2.1 etiketinden](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.1) kullanın. Registry sürümü ayrı doğrulanır; [0.2.0](https://pypi.org/project/lunixi-sdk/0.2.0/) önceki yayımlanmış sürümdür. Framework uygulamaları ayrı paket değildir.
 
 Bunlar ayrı paket kayıtları değil, aynı SDK/Commerce çekirdeğini kullanan tam kaynak uygulamalardır. Doğrulanan hedefler Python 3.12 üzerinde Django 6.1.2, FastAPI 0.162.0 ve Flask 3.1.3'tür. Gerçek kullanıcı/sipariş/stok/olay tabloları kullanılır. Mevcut mağazada kendi auth/sipariş/teslim modellerine aynı transaction sözleşmesi uygulanmalıdır.
 
@@ -12,7 +12,7 @@ python3.12 -m venv .venv
 
 Sunucuda korunan ortam/secret manager üzerinden `LUNIXI_PUBLIC_ORIGIN` (HTTPS uygulama origin'i), `LUNIXI_MERCHANT_ID`, `LUNIXI_KEY_ID`, `LUNIXI_PRIVATE_KEY`, ayrı `LUNIXI_WEBHOOK_SECRET` (16+ karakter), ayrı `LUNIXI_SESSION_SECRET` (32+ karakter), `LUNIXI_ENCRYPTION_KEY` (bağımsız rastgele 32 baytın base64'ü) ve `LUNIXI_DATABASE` (web kökü dışında kalıcı SQLite dosyası) tanımlanır. Veritabanı üst klasörünü operatör oluşturur. Gerçek değerleri Git'e koymayın.
 
-`LUNIXI_CHECKOUT_MODE=hosted|embedded`, `LUNIXI_PREAUTH=true|false`, `LUNIXI_LOCALE=en|tr` seçenekleri vardır. Varsayılan gateway `https://api-gateway.lunixi.com`; alternatif yalnız güvenilen operatör ayarıdır. Bağımsız anahtarlar `secrets.token_urlsafe(48)` ve `base64.b64encode(os.urandom(32)).decode()` ile yerelde üretilebilir. Bir anahtardan diğerini türetmeyin; ayrı yedek alın.
+`LUNIXI_CHECKOUT_MODE=embedded|hosted (varsayılan: embedded)`, `LUNIXI_PREAUTH=true|false`, `LUNIXI_LOCALE=en|tr` seçenekleri vardır. Varsayılan gateway `https://api-gateway.lunixi.com`; alternatif yalnız güvenilen operatör ayarıdır. Bağımsız anahtarlar `secrets.token_urlsafe(48)` ve `base64.b64encode(os.urandom(32)).decode()` ile yerelde üretilebilir. Bir anahtardan diğerini türetmeyin; ayrı yedek alın.
 
 HTTPS/TLS, izinli Host, Secure/HttpOnly/SameSite oturum çerezleri, body/süre sınırları ve korunan loglar gerekir. Lunixi webhook adresi **`<LUNIXI_PUBLIC_ORIGIN>/webhook`** şeklindedir; proxy ham baytları/başlıkları korur.2xx yalnız native commit sonrasında, hatada tekrar edilebilir 503 döner. Tarayıcı token'ı öncesinde oturum/müşteri/sipariş sahipliği ve CSRF doğrulanır. Dönüş POST'u yalnız sahiplik denetimli GET'e yönlendirir; ödeme kanıtı değildir.
 
@@ -29,3 +29,16 @@ Native outbox commit sonrası bildirim kuyruğudur; mevcut uygulamanın gönderi
 Lunixi yönlendirmeli, çoklu kart ve 3DS akışları `/return/<sipariş-anahtarı>` adresine POST gönderir. Siteler arası POST, SameSite=Lax çerezini taşımayabilir. Bu bilgilendirici uç gövdenin tamamını yok sayıp oturum, sipariş, veritabanı veya gateway'e erişmeden aynı göreli `/return/<sipariş-anahtarı>` GET adresine **303** döner. Sonraki GET, normal müşteri sahipliğini ve kimlik doğrulamalı ödeme sorgusunu uygulayıp korumalı checkout sayfasına geçer. Gönderilen durum, ödeme kimliği ve yönlendirme URL'si yetki sağlamaz.
 
 Dönüş POST'u bildirilen gövdede **64 KiB** sınırı uygular; HTTPS proxy'de chunked istekler dahil aynı ağ sınırını koyun. İmzalı webhook'un ayrı 1 MiB sınırı korunur. Yalnız bilgilendirici dönüş ve imzalı webhook checkout CSRF kontrolü dışındadır; finansal müşteri istekleri CSRF ve sahiplik ister. Gerçek WSGI/Uvicorn HTTP testleri oturumsuz303, sahte alanların yok sayılması ve bu aşamada sıfır veritabanı/gateway erişimini doğrular.
+
+## Varsayılan gömülü form ve isteğe bağlı backend ödeme sayfası
+
+
+Framework örneklerinde varsayılan `LUNIXI_CHECKOUT_MODE=embedded` değeridir. Mevcut form yalnız `https://cdn.lunixi.com/lunixi-checkout.min.js` ve resmi object/token/mount API'siyle mağaza içinde açılır. Açıkça seçilen `hosted` modu da korunur. `IntentResult.payment_page_url`, backend'in isteğe bağlı `paymentPageUrl` alanını alır; `hosted_url` doğrulayıp bu adresi birebir döndürür. Sayfanın opak token'ı gömülü form token'ından farklı olabilir. Eksik/geçersiz adreste yönlendirme durur; tarayıcı token'ından adres üretilmez.
+
+İki mod aynı formu kullanır; açık yöntemler, çoklu kart, taksit ve sigorta yönlendirme gerektirmez. Token ve sayfa adresi ayrı authenticated bağlamlarla şifrelenir. Kayıtlı dönüş adresi/mod/gövde/hash/anahtar değişmez; ayar değişikliği yeni tahsilat başlatamaz. Eski yönlendirmeli denemede backend adresi yoksa mutabakat gerekir. Ham webhook, sahiplik/oturum/CSRF, doğrulanmış tahsilat ve bilgilendirici 3DS/çoklu kart dönüşleri korunur.
+
+0.2.1 kaynak sürümü için 27 odaklı SDK/native Django/FastAPI/Flask kontrolü geçti; önceki tam 0.2.0 doğrulaması temel kanıt olarak korunur. Canlı tahsilat veya yeni geniş merchant kabulü yapılmadı.
+
+Checkout sayfasının CSP’si form POST’u için yalnız `'self'` ve yapılandırılan gateway origin’ine (varsayılan `https://api-gateway.lunixi.com`) izin verir. Böylece tarayıcı SDK’sının desteklediği cüzdan/sağlayıcı ve eski POST geçişleri korunur. İncelenmiş başka bir sağlayıcı gerekiyorsa yalnız sunucuda `LUNIXI_FORM_ACTION_ORIGINS` tanımlayın: virgülle ayrılmış tam HTTPS origin’leri; boşluk, yol, sondaki slash, kullanıcı bilgisi, sorgu, fragment ve wildcard kabul edilmez. Geçersiz ayar reddedilir; gateway yanıtı veya tarayıcı alanı listeyi genişletemez. Script nonce, frame/connect sınırları ve bilgilendirici dönüş güvenliği korunur.
+
+CSP düzeltmesi üç framework genelinde 21 odaklı yapılandırma ve yerel yanıt kontrolü ekler; canlı üye işyeri işlemi çalıştırılmadı.

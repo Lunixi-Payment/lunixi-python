@@ -19,6 +19,7 @@ class PaymentGateway:
         self.lost_create = False
         self.lost_mutation = False
         self.defer = False
+        self.payment_page_url = "https://pay.lunixi.com/payment/server-issued-page-0123456789"
         self.lock = threading.Lock()
 
     def send(self, method, url, headers, body, timeout):
@@ -53,6 +54,7 @@ class PaymentGateway:
                     "data": {
                         "paymentId": payment_id,
                         "token": "synthetic_browser_token_" + payment_id,
+                        "paymentPageUrl": self.payment_page_url,
                     }
                 }
                 self.keys[key] = (method, path, value, result)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -63,7 +64,8 @@ def test_native_login_csrf_and_customer_ownership(native):
         HTTP_ORIGIN="https://testserver",
     )
     assert response.status_code == 200
-    assert response.json()["redirect"].startswith("https://pay.lunixi.com/payment/")
+    assert response.json()["config"]["type"] == "payment"
+    assert "redirect" not in response.json()
     assert "synthetic_webhook_secret" not in response.content.decode()
     assert "PRIVATE KEY" not in response.content.decode()
 
@@ -150,3 +152,63 @@ def test_native_atomic_rollback_concurrency_and_fulfillment_hold(native, monkeyp
     assert Stock.objects.get(pk="sample").quantity == 10
     assert Event.objects.count() == 1
     assert Outbox.objects.count() == 1
+
+
+def test_optional_hosted_uses_exact_backend_url_and_keeps_original_attempt(native):
+    orders, gateway, user, other, order, client = native
+    orders.settings = replace(orders.settings, mode="hosted")
+    client.force_login(user)
+    token = csrf(client, order.pk)
+    response = client.post(
+        "/checkout/" + order.pk,
+        secure=True,
+        HTTP_X_CSRF_TOKEN=token,
+        HTTP_ORIGIN="https://testserver",
+    )
+    assert response.status_code == 200
+    assert response.json() == {"redirect": gateway.payment_page_url}
+    record = orders.service._load(order.pk)
+    assert gateway.payment_page_url not in record["paymentPageUrl"]
+    calls = len(gateway.calls)
+    orders.settings = replace(orders.settings, mode="embedded")
+    assert (
+        client.post(
+            "/checkout/" + order.pk,
+            secure=True,
+            HTTP_X_CSRF_TOKEN=token,
+            HTTP_ORIGIN="https://testserver",
+        ).status_code
+        == 409
+    )
+    assert orders.service._load(order.pk)["key"] == record["key"]
+    assert len(gateway.calls) == calls
+
+
+def test_rendered_checkout_csp_default_and_operator_origins_fail_closed(native):
+    orders, gateway, user, other, order, client = native
+    client.force_login(user)
+    response = client.get("/checkout/" + order.pk, secure=True)
+    assert response.status_code == 200
+    policy = response["Content-Security-Policy"]
+    assert "form-action 'self' https://api-gateway.lunixi.com" in policy
+    nonce = re.search(r'<script[^>]*nonce="([^"]+)"', response.content.decode()).group(1)
+    assert "'nonce-" + nonce + "'" in policy
+    assert response["Referrer-Policy"] == "no-referrer"
+    orders.settings = replace(
+        orders.settings,
+        form_action_origins=("https://api-gateway.lunixi.com", "https://provider.example:8443"),
+    )
+    response = client.get("/checkout/" + order.pk, secure=True)
+    assert response.status_code == 200
+    assert (
+        "form-action 'self' https://api-gateway.lunixi.com https://provider.example:8443"
+        in response["Content-Security-Policy"]
+    )
+    orders.settings = replace(
+        orders.settings, form_action_origins=("https://safe.example;form-action https:",)
+    )
+    response = client.get("/checkout/" + order.pk, secure=True)
+    assert response.status_code == 403
+    assert "https://safe.example" not in response.content.decode()
+    assert "https://cdn.lunixi.com" not in response.content.decode()
+    assert gateway.calls == []

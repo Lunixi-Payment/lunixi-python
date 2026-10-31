@@ -1,6 +1,6 @@
 # Runnable framework integrations
 
-The SDK **0.2.0** release is available from [PyPI](https://pypi.org/project/lunixi-sdk/0.2.0/) with `pip install lunixi-sdk==0.2.0`. Use the [v0.2.0 source checkout](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.0) for the applications and locked development environment below; framework examples are not separate registry packages.
+Use the current **0.2.1 source release** and locked example environment from [v0.2.1](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.1). Registry availability is verified separately; [0.2.0](https://pypi.org/project/lunixi-sdk/0.2.0/) is the earlier published release. Framework applications are not separate packages.
 
 These are complete source applications around the same SDK/Commerce workflow, not separately published framework plugins. Use the pinned development lock on Python 3.12+ for the verified Django 6.1.2, FastAPI 0.162.0 and Flask 3.1.3 targets. Existing stores should adapt their own authentication/order/fulfillment models; the examples use real persisted sample orders/stock and enforce ownership.
 
@@ -25,10 +25,11 @@ Set the following through the server's protected environment/secret manager (no 
 | `LUNIXI_SESSION_SECRET` | Independent session signing secret, at least 32 characters |
 | `LUNIXI_ENCRYPTION_KEY` | Base64 of a separate random 32-byte key, backed up outside DB/web root |
 | `LUNIXI_DATABASE` | Absolute persistent SQLite file path outside web root; parent directory exists |
-| `LUNIXI_CHECKOUT_MODE` | `hosted` (default) or `embedded` |
+| `LUNIXI_CHECKOUT_MODE` | `embedded` (default) or explicitly selected `hosted` |
 | `LUNIXI_PREAUTH` | `true` enables authorization-only checkout; otherwise immediate capture |
 | `LUNIXI_LOCALE` | `en` or `tr` |
 | `LUNIXI_GATEWAY_ORIGIN` | Optional trusted operator override; defaults to `https://api-gateway.lunixi.com` |
+| `LUNIXI_FORM_ACTION_ORIGINS` | Optional comma-separated exact HTTPS provider origins for form POSTs; gateway origin is always included |
 
 Generate independent secrets locally with `secrets.token_urlsafe(48)` and the encryption key with `base64.b64encode(os.urandom(32)).decode()`. Never derive one from another. Configure TLS termination, backups, server body/time limits and protected logs. The examples accept only the configured Host and use Secure/HttpOnly/SameSite cookies. Provider callback POSTs are informational redirects into an owned GET; they do not require or replace the signed webhook.
 
@@ -62,3 +63,16 @@ Native framework tests exercise real users/cookies/CSRF, wrong customer/Host, ra
 Lunixi hosted, split and 3DS flows POST to `/return/<order-key>`. A cross-site POST may omit the SameSite=Lax cookie. This informational route therefore ignores the entire body and sends **303** to the same relative `/return/<order-key>` GET without accessing the session, order, database or gateway. Only that subsequent GET restores normal customer ownership checks and authenticated reconciliation, then redirects to the protected checkout page. Posted status, payment IDs and redirect URLs have no authority.
 
 The return POST has a **64 KiB** declared-body bound; enforce that wire limit at the HTTPS proxy too, including chunked requests. The signed webhook retains its separate 1 MiB bound. Only the informational return and signed webhook are exempt from checkout CSRF; all financial customer requests still require CSRF and ownership. Real loopback WSGI/Uvicorn HTTP tests prove no-session303, ignored forged fields and zero database/gateway calls on this hop.
+
+## Embedded default and optional backend payment page
+
+
+The framework examples default to `LUNIXI_CHECKOUT_MODE=embedded`: the existing form mounts on the merchant website using only `https://cdn.lunixi.com/lunixi-checkout.min.js` and the official object/token/mount API. Explicit `hosted` remains supported. `IntentResult.payment_page_url` reads the optional backend `paymentPageUrl`; `hosted_url` validates and returns that exact URL, whose opaque page token can differ from the embedded token. Missing/invalid URLs fail closed; no URL is built from the browser token.
+
+The shared form owns enabled methods, multi-card, installments and insurance in either mode; none requires a redirect. Persisted tokens and page URLs are encrypted with distinct authenticated contexts. The original callback/mode/body/hash/key remain bound to an existing attempt: changing configuration does not create a replacement charge. An older hosted record without a backend URL requires reconciliation. Strict raw webhooks, owner/session/CSRF checks, authenticated settlement and informational 3DS/split returns remain required.
+
+Current source 0.2.1 focused checks: 27 SDK/native Django/FastAPI/Flask cases passed; prior full 0.2.0 verification remains the baseline. No live merchant charge or broad new merchant acceptance was run.
+
+The checkout page’s CSP permits form POSTs only to `'self'` and the configured gateway origin (default `https://api-gateway.lunixi.com`). This preserves wallet/provider and legacy POST handoffs supported by the browser SDK. For another reviewed provider, set server-only `LUNIXI_FORM_ACTION_ORIGINS` to a comma-separated list of exact HTTPS origins, without spaces, paths, trailing slashes, credentials, query, fragment or wildcards. Invalid configuration fails closed; gateway responses and browser fields never expand this list. Script nonces, frame/connect restrictions and informational return handling remain in force.
+
+The CSP follow-up adds 21 focused configuration and native rendered-response cases across all three frameworks; no live merchant transaction was run.

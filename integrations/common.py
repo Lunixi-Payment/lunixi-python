@@ -8,10 +8,12 @@ import hmac
 import html
 import json
 import os
+import re
 import secrets
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from lunixi import LunixiClient
 from lunixi.commerce import (
@@ -25,6 +27,27 @@ from lunixi.commerce import (
     Transaction,
 )
 from lunixi.validation import amount_minor, currency_code, identifier, origin_url
+
+DEFAULT_FORM_ACTION_ORIGINS = ("https://api-gateway.lunixi.com",)
+_DNS_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+_FORM_ORIGIN = re.compile(r"https://" + _DNS_LABEL + r"(?:\." + _DNS_LABEL + r")*(?::[0-9]{1,5})?")
+
+
+def approved_form_action_origins(gateway: str, additional: str = "") -> tuple[str, ...]:
+    """Server-only CSP destinations; never derive these from a payment response."""
+    values = [gateway] + (additional.split(",") if additional else [])
+    for value in values:
+        if not isinstance(value, str) or not _FORM_ORIGIN.fullmatch(value):
+            raise CommerceError("Form actions require explicit HTTPS origins without paths.")
+        uri = urlsplit(value)
+        try:
+            port = 443 if uri.port is None else uri.port
+        except ValueError:
+            raise CommerceError("Invalid form-action origin.") from None
+        if len(uri.hostname or "") > 253 or not 1 <= port <= 65535:
+            raise CommerceError("Invalid form-action origin.")
+    return tuple(dict.fromkeys(values))
+
 
 TEXT = {
     "en": {
@@ -56,9 +79,10 @@ class Settings:
     session_secret: str
     encryption_key: bytes
     database: str
-    mode: str = "hosted"
+    mode: str = "embedded"
     preauth: bool = False
     locale: str = "en"
+    form_action_origins: tuple[str, ...] = DEFAULT_FORM_ACTION_ORIGINS
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -86,15 +110,23 @@ class Settings:
             os.environ["LUNIXI_SESSION_SECRET"],
             key,
             os.environ["LUNIXI_DATABASE"],
-            os.environ.get("LUNIXI_CHECKOUT_MODE", "hosted"),
+            os.environ.get("LUNIXI_CHECKOUT_MODE", "embedded"),
             os.environ.get("LUNIXI_PREAUTH", "false") == "true",
             os.environ.get("LUNIXI_LOCALE", "en"),
+            approved_form_action_origins(
+                os.environ.get("LUNIXI_GATEWAY_ORIGIN", DEFAULT_FORM_ACTION_ORIGINS[0]),
+                os.environ.get("LUNIXI_FORM_ACTION_ORIGINS", ""),
+            ),
         )
         settings.validate()
         return settings
 
     def validate(self) -> None:
         origin_url(self.public_origin)
+        if not isinstance(self.form_action_origins, tuple) or not self.form_action_origins:
+            raise CommerceError("Explicit form-action origins are required.")
+        for origin in self.form_action_origins:
+            approved_form_action_origins(origin)
         if (
             len(self.webhook_secret) < 16
             or len(self.session_secret) < 32
@@ -368,7 +400,10 @@ def checkout_page(
     return f'''<!doctype html><html lang="{html.escape(locale)}"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>{html.escape(t["title"])}</title><style nonce="{nonce}">body{{font:18px system-ui;max-width:45rem;margin:3rem auto;padding:1rem;color:#1e3a5f}}button{{background:#ff6b35;color:#fff;padding:.8rem;border:0;border-radius:.5rem}}img{{width:200px}}</style><img src="/assets/lunixi-logo.svg" alt="Lunixi"><h1>{html.escape(t["title"])}</h1><p>{html.escape(t["methods"])}</p><p id="message" role="status">{html.escape(message)}</p><div id="lunixi-checkout-form"></div>{button}<script src="https://cdn.lunixi.com/lunixi-checkout.min.js" nonce="{nonce}"></script><script nonce="{nonce}">const config={data};const button=document.getElementById('pay');if(button)button.onclick=async()=>{{button.disabled=true;try{{const response=await fetch(config.url,{{method:'POST',credentials:'same-origin',headers:{{'X-CSRF-Token':config.csrf}}}});const result=await response.json();if(!response.ok)throw Error();if(result.redirect){{location.assign(result.redirect);return;}}const form=Lunixi.checkout.create(result.config);form.mount('#lunixi-checkout-form');button.hidden=true;const timer=setInterval(async()=>{{if(!document.getElementById('message')){{clearInterval(timer);return;}}const res=await fetch(config.status,{{credentials:'same-origin',cache:'no-store'}});const value=await res.json();if(value.complete){{clearInterval(timer);location.reload();}}}},5000);}}catch(_){{document.getElementById('message').textContent=config.error;button.disabled=false;}}}};</script></html>'''
 
 
-def security_headers(nonce: Optional[str] = None) -> dict[str, str]:
+def security_headers(
+    nonce: Optional[str] = None,
+    form_origins: tuple[str, ...] = DEFAULT_FORM_ACTION_ORIGINS,
+) -> dict[str, str]:
     headers = {
         "Cache-Control": "no-store",
         "Referrer-Policy": "no-referrer",
@@ -376,11 +411,16 @@ def security_headers(nonce: Optional[str] = None) -> dict[str, str]:
         "X-Frame-Options": "DENY",
     }
     if nonce:
+        if not form_origins:
+            raise CommerceError("Explicit form-action origins are required.")
+        for origin in form_origins:
+            approved_form_action_origins(origin)
         headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'nonce-"
             + nonce
             + "' https://cdn.lunixi.com; style-src 'self' 'nonce-"
             + nonce
-            + "'; frame-src https://*.lunixi.com; connect-src 'self' https://*.lunixi.com; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+            + "'; frame-src https://*.lunixi.com; connect-src 'self' https://*.lunixi.com; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self' "
+            + " ".join(form_origins)
         )
     return headers

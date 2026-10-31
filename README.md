@@ -13,7 +13,7 @@
 
 **[Documentation](https://docs.lunixi.com/sdks/python) · [Changelog](https://github.com/Lunixi-Payment/lunixi-python/blob/main/CHANGELOG.md) · [Issues](https://github.com/Lunixi-Payment/lunixi-python/issues) · [Security](https://github.com/Lunixi-Payment/lunixi-python/blob/main/SECURITY.md)**
 
-Version **0.2.0** adds typed payment APIs and durable checkout orchestration while preserving the existing fraud decision/event API. The SDK is synchronous, thread-safe per client, and ships `py.typed`.
+Version **0.2.1** adds typed payment APIs and durable checkout orchestration while preserving the existing fraud decision/event API. The SDK is synchronous, thread-safe per client, and ships `py.typed`.
 
 [Turkish](README.tr.md) · [Framework examples](docs/FRAMEWORKS.md) · [Django](docs/DJANGO.md) · [FastAPI](docs/FASTAPI.md) · [Flask](docs/FLASK.md)
 
@@ -27,16 +27,16 @@ Version **0.2.0** adds typed payment APIs and durable checkout orchestration whi
 
 ## Installation
 
-Version **0.2.0** is published on [PyPI](https://pypi.org/project/lunixi-sdk/0.2.0/):
+Source release **0.2.1** contains the updated form/URL contract. Install this exact registry version when available, or use its reviewed source tag below. [0.2.0](https://pypi.org/project/lunixi-sdk/0.2.0/) is the earlier published release:
 
 ```sh
-pip install lunixi-sdk==0.2.0
+pip install lunixi-sdk==0.2.1
 ```
 
 Alternatively, install the same source tag from GitHub:
 
 ```sh
-pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.0"
+pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.1"
 ```
 
 From a source checkout, `pip install -e .` installs the SDK; `pip install -e '.[frameworks]'` installs optional runtime dependencies. Framework apps and full native tests need Python 3.12+ and the source checkout. They are runnable examples, not separately registered framework packages.
@@ -60,7 +60,7 @@ intent = client.payments().create_intent(
 )
 # Return only after authenticating ownership of the persisted order:
 public_form_configuration = intent.browser_config()
-# Or redirect to the fixed hosted origin:
+# Or redirect to the validated backend paymentPageUrl:
 hosted_url = intent.hosted_url
 ```
 
@@ -91,7 +91,7 @@ ledger.install()  # explicit schema setup, outside request handling
 service = CheckoutService(client, ledger, SecretBox(server_encryption_key_bytes))
 session = service.start(
     "order-123", OrderSnapshot(merchant_id, "order-123", 1990, "TRY"),
-    "https://shop.example/return/order-123", hosted=True,
+    "https://shop.example/return/order-123", hosted=False,
 )
 # `apply_native` validates current native totals/holds and writes using tx.connection.
 decision = service.reconcile("order-123", apply_native)
@@ -157,3 +157,11 @@ python -m build
 The lock targets the verified Python 3.12 development environment. Core CI also exercises Python 3.9/3.10/3.14; framework tests run on 3.12. Native tests use real framework clients/users/CSRF/ORM/databases and synthetic external gateway transport. The HTTPS transport fixture binds only loopback. No live charge, external email or automatic shipment occurs in tests. Wheel contains the typed SDK; sdist/source also contains runnable apps, tests, original logos and EN/TR guides.
 
 MIT · [Security](SECURITY.md) · [Contribution guide](CONTRIBUTING.md) · [Changelog](CHANGELOG.md).
+
+## Embedded default and optional backend payment page
+
+The framework examples default to `LUNIXI_CHECKOUT_MODE=embedded`: the existing form mounts on the merchant website using only `https://cdn.lunixi.com/lunixi-checkout.min.js` and the official object/token/mount API. Explicit `hosted` remains supported. `IntentResult.payment_page_url` reads the optional backend `paymentPageUrl`; `hosted_url` validates and returns that exact URL, whose opaque page token can differ from the embedded token. Missing/invalid URLs fail closed; no URL is built from the browser token.
+
+The shared form owns enabled methods, multi-card, installments and insurance in either mode; none requires a redirect. Persisted tokens and page URLs are encrypted with distinct authenticated contexts. The original callback/mode/body/hash/key remain bound to an existing attempt: changing configuration does not create a replacement charge. An older hosted record without a backend URL requires reconciliation. Strict raw webhooks, owner/session/CSRF checks, authenticated settlement and informational 3DS/split returns remain required.
+
+Current source 0.2.1 focused checks: 27 SDK/native Django/FastAPI/Flask cases passed; prior full 0.2.0 verification remains the baseline. No live merchant charge or broad new merchant acceptance was run.

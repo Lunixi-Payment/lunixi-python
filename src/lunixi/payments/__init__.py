@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 from urllib.parse import urlsplit
@@ -73,6 +74,21 @@ class CreateIntent:
 class IntentResult:
     payment_id: str
     token: str = field(repr=False)
+    payment_page_url: str = field(default="", repr=False)
+
+    def __post_init__(self) -> None:
+        if self.payment_page_url != "":
+            self._validated_page_url(self.payment_page_url)
+
+    @staticmethod
+    def _validated_page_url(value: Any) -> str:
+        if (
+            not isinstance(value, str)
+            or re.fullmatch(r"https://pay\.lunixi\.com/payment/[A-Za-z0-9_.~-]{16,4096}", value)
+            is None
+        ):
+            raise ApiError("The gateway returned an invalid paymentPageUrl.")
+        return value
 
     @classmethod
     def from_response(cls, response: Mapping[str, Any]) -> IntentResult:
@@ -90,13 +106,13 @@ class IntentResult:
         ):
             raise ApiError("Intent response is uncertain.")
         identifier(payment)
-        return cls(payment, value["token"])
+        return cls(payment, value["token"], value.get("paymentPageUrl", ""))
 
     @property
     def hosted_url(self) -> str:
-        from urllib.parse import quote
-
-        return "https://pay.lunixi.com/payment/" + quote(self.token, safe="")
+        if not self.payment_page_url:
+            raise ApiError("The gateway did not return paymentPageUrl; reconcile the attempt.")
+        return self._validated_page_url(self.payment_page_url)
 
     def browser_config(self) -> dict[str, Any]:
         return {

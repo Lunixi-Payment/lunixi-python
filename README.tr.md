@@ -2,22 +2,22 @@
 
 # Lunixi Python SDK
 
-**0.2.0**, mevcut fraud API'sini koruyarak ödeme API'leri ve kalıcı checkout akışı ekler. SDK senkron çalışır, istemci başına thread güvenlidir ve `py.typed` içerir. Python 3.9+; gerçek Django 6.1.2, FastAPI 0.162.0, Flask 3.1.3 örnekleri/testleri Python 3.12+ gerektirir. Kriptografi `cryptography`, JavaScript sayı yazımı `rfc8785`, HTTP/SQLite standart kütüphane üzerinden sağlanır.
+**0.2.1**, mevcut fraud API'sini koruyarak ödeme API'leri ve kalıcı checkout akışı ekler. SDK senkron çalışır, istemci başına thread güvenlidir ve `py.typed` içerir. Python 3.9+; gerçek Django 6.1.2, FastAPI 0.162.0, Flask 3.1.3 örnekleri/testleri Python 3.12+ gerektirir. Kriptografi `cryptography`, JavaScript sayı yazımı `rfc8785`, HTTP/SQLite standart kütüphane üzerinden sağlanır.
 
 [English](README.md) · [Framework rehberi](docs/FRAMEWORKS.tr.md) · [Django](docs/DJANGO.tr.md) · [FastAPI](docs/FASTAPI.tr.md) · [Flask](docs/FLASK.tr.md)
 
 ## Kurulum ve ödeme
 
-**0.2.0** sürümü [PyPI’de yayımlandı](https://pypi.org/project/lunixi-sdk/0.2.0/):
+**0.2.1** kaynak sürümü güncel form/URL sözleşmesini içerir. Registry sürümü erişilebilir olduğunda tam sürümü kurun; aksi halde aşağıdaki incelenmiş kaynak etiketini kullanın. [0.2.0](https://pypi.org/project/lunixi-sdk/0.2.0/) önceki yayımlanmış sürümdür:
 
 ```sh
-pip install lunixi-sdk==0.2.0
+pip install lunixi-sdk==0.2.1
 ```
 
 Alternatif olarak aynı kaynak etiketini GitHub’dan kurabilirsiniz:
 
 ```sh
-pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.0"
+pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.1"
 ```
 
 ```python
@@ -76,3 +76,11 @@ python -m build
 ```
 
 Kilitli ortam Python 3.12 içindir. Testler gerçek framework kullanıcı/CSRF/ORM/istemcilerini ve veritabanını kullanır; dış gateway sentetiktir. HTTPS testi yalnız loopback üzerinde dinler. Canlı tahsilat, dış e-posta veya otomatik sevkiyat yapılmaz. Wheel SDK'yı; sdist/kaynak çalışan uygulamaları, testleri, özgün logoları ve EN/TR belgeleri içerir. [Güvenlik](SECURITY.md), [katkı](CONTRIBUTING.md) ve [değişiklikler](CHANGELOG.md). MIT.
+
+## Varsayılan gömülü form ve isteğe bağlı backend ödeme sayfası
+
+Framework örneklerinde varsayılan `LUNIXI_CHECKOUT_MODE=embedded` değeridir. Mevcut form yalnız `https://cdn.lunixi.com/lunixi-checkout.min.js` ve resmi object/token/mount API'siyle mağaza içinde açılır. Açıkça seçilen `hosted` modu da korunur. `IntentResult.payment_page_url`, backend'in isteğe bağlı `paymentPageUrl` alanını alır; `hosted_url` doğrulayıp bu adresi birebir döndürür. Sayfanın opak token'ı gömülü form token'ından farklı olabilir. Eksik/geçersiz adreste yönlendirme durur; tarayıcı token'ından adres üretilmez.
+
+İki mod aynı formu kullanır; açık yöntemler, çoklu kart, taksit ve sigorta yönlendirme gerektirmez. Token ve sayfa adresi ayrı authenticated bağlamlarla şifrelenir. Kayıtlı dönüş adresi/mod/gövde/hash/anahtar değişmez; ayar değişikliği yeni tahsilat başlatamaz. Eski yönlendirmeli denemede backend adresi yoksa mutabakat gerekir. Ham webhook, sahiplik/oturum/CSRF, doğrulanmış tahsilat ve bilgilendirici 3DS/çoklu kart dönüşleri korunur.
+
+0.2.1 kaynak sürümü için 27 odaklı SDK/native Django/FastAPI/Flask kontrolü geçti; önceki tam 0.2.0 doğrulaması temel kanıt olarak korunur. Canlı tahsilat veya yeni geniş merchant kabulü yapılmadı.
