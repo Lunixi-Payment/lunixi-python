@@ -2,22 +2,22 @@
 
 # Lunixi Python SDK
 
-**1.0.0**, mevcut fraud ve kalıcı checkout akışlarını koruyarak para alanlarını kanonik küçük birim string sözleşmesine geçirir. [Geçiş rehberini](MIGRATION-1.0.md) uygulayın. SDK senkron çalışır, istemci başına thread güvenlidir ve `py.typed` içerir. Python 3.9+; gerçek Django 6.1.2, FastAPI 0.162.0, Flask 3.1.3 örnekleri/testleri Python 3.12+ gerektirir. Kriptografi `cryptography`, JavaScript sayı yazımı `rfc8785`, HTTP/SQLite standart kütüphane üzerinden sağlanır.
+**1.0.1**, mevcut fraud ve kalıcı checkout akışlarını koruyarak para alanlarını kanonik küçük birim string sözleşmesine geçirir. [Geçiş rehberini](MIGRATION-1.0.md) uygulayın. SDK senkron çalışır, istemci başına thread güvenlidir ve `py.typed` içerir. Python 3.9+; gerçek Django 6.1.2, FastAPI 0.162.0, Flask 3.1.3 örnekleri/testleri Python 3.12+ gerektirir. Kriptografi `cryptography`, JavaScript sayı yazımı `rfc8785`, HTTP/SQLite standart kütüphane üzerinden sağlanır.
 
 [English](README.md) · [Framework rehberi](docs/FRAMEWORKS.tr.md) · [Django](docs/DJANGO.tr.md) · [FastAPI](docs/FASTAPI.tr.md) · [Flask](docs/FLASK.tr.md)
 
 ## Kurulum ve ödeme
 
-1.0.0 PyPI üzerinde kullanılabilir olduğunda aşağıdaki komutla tam sürümü kurun. 0.x paketleri önceki para sözleşmesini kullanır:
+1.0.1 PyPI üzerinde kullanılabilir olduğunda aşağıdaki komutla tam sürümü kurun. 0.x paketleri önceki para sözleşmesini kullanır:
 
 ```sh
-pip install lunixi-sdk==1.0.0
+pip install lunixi-sdk==1.0.1
 ```
 
 Alternatif olarak aynı kaynak etiketini GitHub’dan kurabilirsiniz:
 
 ```sh
-pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v1.0.0"
+pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v1.0.1"
 ```
 
 ```python

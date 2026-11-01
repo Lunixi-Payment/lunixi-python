@@ -1,6 +1,6 @@
 # Runnable framework integrations
 
-Install `lunixi-sdk==1.0.0` after it is available on PyPI. For the runnable framework applications and locked environment, use the matching [v1.0.0 source tag](https://github.com/Lunixi-Payment/lunixi-python/tree/v1.0.0). Framework applications are not separate packages and are not included in the SDK wheel. Follow the [money-string migration](../MIGRATION-1.0.md).
+Install `lunixi-sdk==1.0.1` after it is available on PyPI. For the runnable framework applications and locked environment, use the matching [v1.0.1 source tag](https://github.com/Lunixi-Payment/lunixi-python/tree/v1.0.1). Framework applications are not separate packages and are not included in the SDK wheel. Follow the [money-string migration](../MIGRATION-1.0.md).
 
 These are complete source applications around the same SDK/Commerce workflow, not separately published framework plugins. Use the pinned development lock on Python 3.12+ for the verified Django 6.1.2, FastAPI 0.162.0 and Flask 3.1.3 targets. Existing stores should adapt their own authentication/order/fulfillment models; the examples use real persisted sample orders/stock and enforce ownership.
 
@@ -9,7 +9,7 @@ These are complete source applications around the same SDK/Commerce workflow, no
 Check out the matching example source, then install its locked environment:
 
 ```sh
-git clone --branch v1.0.0 --depth 1 https://github.com/Lunixi-Payment/lunixi-python.git
+git clone --branch v1.0.1 --depth 1 https://github.com/Lunixi-Payment/lunixi-python.git
 cd lunixi-python
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements-dev.lock

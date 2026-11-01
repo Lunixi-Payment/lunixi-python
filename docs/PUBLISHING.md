@@ -10,8 +10,8 @@ The public workflow is exported from the repository's publication template to
 release **before creating its immutable tag**; it must also exist on the default
 branch for manual dispatch.
 
-For a manual **1.0.0** publication, select **tag v1.0.0** in the GitHub Actions
-workflow dispatch ref selector and enter **v1.0.0** in the `tag` input. Selecting
+For a manual **1.0.1** publication, select **tag v1.0.1** in the GitHub Actions
+workflow dispatch ref selector and enter **v1.0.1** in the `tag` input. Selecting
 `main` while entering a release tag now fails deliberately. An existing GitHub
 Release publication event remains supported, but its payload tag, invocation
 ref and SHA must all identify that same release commit. Wait for the source

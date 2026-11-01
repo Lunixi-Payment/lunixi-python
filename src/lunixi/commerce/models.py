@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from dataclasses import asdict, dataclass
-from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Optional
 
 from ..errors import ConfigurationError, LunixiError
@@ -25,6 +23,7 @@ def integer(value: Any) -> int:
 def minor_units(decimal: str, currency: str) -> str:
     """Exact decimal string conversion; floats and fractional minor units fail."""
     from ..validation import decimal_to_minor
+
     return amount_minor(decimal_to_minor(decimal, currency))
 
 

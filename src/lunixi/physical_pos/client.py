@@ -48,9 +48,9 @@ from typing import Any, Dict, Iterator, Mapping, Optional
 from ..api_client import ApiClient
 from ..errors import ConfigurationError
 from ..http.envelope import Page
+from ..webhook.verifier import WebhookVerifier
 from . import _support as s
 from .results import PhysicalPosPaymentWriteResult
-from ..webhook.verifier import WebhookVerifier
 from .webhook import PhysicalPosWebhookEvent, parse_webhook_event
 
 __all__ = ["PhysicalPosClient"]

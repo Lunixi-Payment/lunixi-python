@@ -79,7 +79,13 @@ def test_not_card_data_keys(key):
 
 
 def test_no_sdk_wire_field_is_card_data():
-    names = set(PAYMENT_FIELDS + PAYMENT_TARGET_FIELDS + SALE_ITEM_FIELDS + REVERSAL_FIELDS + REFUND_ITEM_FIELDS)
+    names = set(
+        PAYMENT_FIELDS
+        + PAYMENT_TARGET_FIELDS
+        + SALE_ITEM_FIELDS
+        + REVERSAL_FIELDS
+        + REFUND_ITEM_FIELDS
+    )
     for fields in PHYSICAL_POS_FILTERS.values():
         names.update(fields)
     assert [name for name in sorted(names) if is_card_data_key(name)] == []

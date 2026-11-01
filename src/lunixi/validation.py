@@ -64,14 +64,100 @@ def validate_money_fields(value: Any, *, response: bool = False) -> None:
         for key, entry in value.items():
             if key in ("metadata", "fields", "inputFields", "insuranceData") or entry is None:
                 continue
-            if key in ('amount', 'amountMinor', 'authorizedAmount', 'availableBalance', 'balanceMinor', 'buyerTotalCharge', 'cancelledPremiumAmount', 'capturedAmount', 'capturedAmountMinor', 'chargeAmount', 'collectedAmountMinor', 'collectedPremiumAmount', 'compensatedAmount', 'disputedAmount', 'feeTotal', 'fixedFee', 'inForcePremiumAmount', 'insuranceValueAmount', 'legAmount', 'legsAmount', 'lineTotalMinor', 'maxAmount', 'maxAmountMinor', 'minAmount', 'minAmountMinor', 'nonRefundableAmount', 'paidAmount', 'paidPrice', 'pendingBalance', 'premiumAmount', 'price', 'refundAmount', 'refundOpenPremiumAmount', 'refundableAmount', 'refundedAmount', 'refundedAmountMinor', 'refundedPremiumAmount', 'requestedAmount', 'reservedBalance', 'sourceAmountMinor', 'targetAmountMinor', 'taxAmountMinor', 'taxTotal', 'totalAmount', 'unitPriceMinor'):
-                amount_minor(entry, positive=not response and key in ("amount", "price", "totalAmount"), signed="balance" in key.lower())
+            if key in (
+                "amount",
+                "amountMinor",
+                "authorizedAmount",
+                "availableBalance",
+                "balanceMinor",
+                "buyerTotalCharge",
+                "cancelledPremiumAmount",
+                "capturedAmount",
+                "capturedAmountMinor",
+                "chargeAmount",
+                "collectedAmountMinor",
+                "collectedPremiumAmount",
+                "compensatedAmount",
+                "disputedAmount",
+                "feeTotal",
+                "fixedFee",
+                "inForcePremiumAmount",
+                "insuranceValueAmount",
+                "legAmount",
+                "legsAmount",
+                "lineTotalMinor",
+                "maxAmount",
+                "maxAmountMinor",
+                "minAmount",
+                "minAmountMinor",
+                "nonRefundableAmount",
+                "paidAmount",
+                "paidPrice",
+                "pendingBalance",
+                "premiumAmount",
+                "price",
+                "refundAmount",
+                "refundOpenPremiumAmount",
+                "refundableAmount",
+                "refundedAmount",
+                "refundedAmountMinor",
+                "refundedPremiumAmount",
+                "requestedAmount",
+                "reservedBalance",
+                "sourceAmountMinor",
+                "targetAmountMinor",
+                "taxAmountMinor",
+                "taxTotal",
+                "totalAmount",
+                "unitPriceMinor",
+            ):
+                amount_minor(
+                    entry,
+                    positive=not response and key in ("amount", "price", "totalAmount"),
+                    signed="balance" in key.lower(),
+                )
             elif key == "suggestedAmountsMinor":
                 if not isinstance(entry, list):
                     raise ConfigurationError("suggestedAmountsMinor must be a list.")
                 for amount in entry:
                     amount_minor(amount)
-            elif key in ('data', 'details', 'items', 'rows', 'results', 'payments', 'operations', 'balances', 'wallets', 'legs', 'aggregate', 'refund', 'refunds', 'totals', 'charge', 'fees', 'fee', 'balance', 'splits', 'sellers', 'basketItems', 'promissoryNote', 'schedule', 'notes', 'lines', 'offers', 'policies', 'reconciliation', 'quotes', 'payment', 'transactions', 'accounts', 'settlements', 'payouts', 'limits'):
+            elif key in (
+                "data",
+                "details",
+                "items",
+                "rows",
+                "results",
+                "payments",
+                "operations",
+                "balances",
+                "wallets",
+                "legs",
+                "aggregate",
+                "refund",
+                "refunds",
+                "totals",
+                "charge",
+                "fees",
+                "fee",
+                "balance",
+                "splits",
+                "sellers",
+                "basketItems",
+                "promissoryNote",
+                "schedule",
+                "notes",
+                "lines",
+                "offers",
+                "policies",
+                "reconciliation",
+                "quotes",
+                "payment",
+                "transactions",
+                "accounts",
+                "settlements",
+                "payouts",
+                "limits",
+            ):
                 validate_money_fields(entry, response=response)
 
 

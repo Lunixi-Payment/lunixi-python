@@ -209,7 +209,9 @@ def body(value: Any, schema: Schema) -> Dict[str, Any]:
     return shape(value, schema, "request")
 
 
-def reject_pan_values(payload: Mapping[str, Any], strict: Iterable[str], item_text: Iterable[str] = ()) -> None:
+def reject_pan_values(
+    payload: Mapping[str, Any], strict: Iterable[str], item_text: Iterable[str] = ()
+) -> None:
     """Refuses a card number written into a free-text value (field path only, never the value).
 
     ``strict`` / ``item_text`` name top-level fields, or ``items[].<field>``
@@ -220,7 +222,7 @@ def reject_pan_values(payload: Mapping[str, Any], strict: Iterable[str], item_te
     ]
     for name, mode in checks:
         if name.startswith("items[]."):
-            field = name[len("items[]."):]
+            field = name[len("items[].") :]
             for index, item in enumerate(payload.get("items") or []):
                 value = item.get(field) if isinstance(item, Mapping) else None
                 if isinstance(value, str) and contains_pan_like_value(value, mode):
@@ -407,7 +409,9 @@ def _written_payment(response: Any) -> Optional[Dict[str, Any]]:
     return dict(payment)
 
 
-def payment_write(api: Any, path: str, payload: Dict[str, Any], key: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def payment_write(
+    api: Any, path: str, payload: Dict[str, Any], key: str
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Sends a payment start / reversal / cancel; returns ``(envelope, payment)``.
 
     Runs its own attempts (the transport's retries are off for the call) with
@@ -429,7 +433,9 @@ def payment_write(api: Any, path: str, payload: Dict[str, Any], key: str) -> Tup
     last_http: Optional[ApiError] = None
     for attempt in range(1, attempts + 1):
         try:
-            response = api.request("POST", path, payload, step_up=True, idempotency_key=key, max_retries=0)
+            response = api.request(
+                "POST", path, payload, step_up=True, idempotency_key=key, max_retries=0
+            )
         except ApiError as error:
             last = error
             if error.status_code != 0:
@@ -468,7 +474,8 @@ def payment_write(api: Any, path: str, payload: Dict[str, Any], key: str) -> Tup
             details=source.details if source is not None else None,
             idempotency_key=key,
         ) from last
-    assert isinstance(last, ApiError)
+    if not isinstance(last, ApiError):
+        raise RuntimeError("A definite physical POS outcome must carry an API error.") from last
     translated = translate(last, key)
     if translated is last:
         raise last

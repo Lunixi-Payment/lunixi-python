@@ -17,7 +17,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev]'
-      - run: python -m pytest -q --ignore=tests/frameworks
+      - run: python -m pytest -q -o faulthandler_timeout=60 --ignore=tests/frameworks
   native:
     runs-on: ubuntu-latest
     steps:
@@ -32,6 +32,6 @@ jobs:
       - run: mypy src/lunixi
       - run: bandit -r src/lunixi integrations -q
       - run: pip-audit -r requirements-dev.lock
-      - run: python -m pytest -q
+      - run: python -m pytest -q -o faulthandler_timeout=60
       - run: python -m build
       - run: python tools/check_distribution.py

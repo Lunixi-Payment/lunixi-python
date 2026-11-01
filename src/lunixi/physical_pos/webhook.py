@@ -129,7 +129,9 @@ def _payload(envelope: Mapping[str, Any]) -> Dict[str, Any]:
         try:
             carried = json.loads(carried)
         except (ValueError, RecursionError) as error:
-            raise WebhookVerificationError("The physical POS payloadJson is not valid JSON.") from error
+            raise WebhookVerificationError(
+                "The physical POS payloadJson is not valid JSON."
+            ) from error
     if isinstance(carried, Mapping) and carried:
         return dict(carried)
     raise WebhookVerificationError("The physical POS webhook carries no payload.")
@@ -172,6 +174,7 @@ def parse_webhook_event(
         raise WebhookVerificationError("This webhook is not a physical POS event.")
     data = _payload(envelope)
     from .money import validate_response_money
+
     validate_response_money(data)
     if event_type.startswith(_PREFIX + "payment."):
         category = "payment"

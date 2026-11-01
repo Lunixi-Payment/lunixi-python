@@ -31,6 +31,7 @@ with tarfile.open(sdist, "r:gz") as archive:
         "integrations/django_app/shop/migrations/0001_initial.py",
         "docs/FRAMEWORKS.md",
         "docs/FRAMEWORKS.tr.md",
+        "MIGRATION-1.0.md",
         "requirements-dev.lock",
         ".github/assets/lunixi-logo.svg",
     ):

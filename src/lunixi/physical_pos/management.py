@@ -195,9 +195,7 @@ class PhysicalPosManagementClient:
         return Page(self._get(path, s.query(filters, "list_store_audit")))
 
     def iterate_store_audit(self, store_id: str, **filters: Any) -> Iterator[Dict[str, Any]]:
-        return PhysicalPosClient._iterate(
-            lambda **f: self.list_store_audit(store_id, **f), filters
-        )
+        return PhysicalPosClient._iterate(lambda **f: self.list_store_audit(store_id, **f), filters)
 
     # ── Registers ───────────────────────────────────────────────────────────
 
@@ -207,9 +205,7 @@ class PhysicalPosManagementClient:
         return Page(self._get(path, s.query(filters, "list_registers")))
 
     def iterate_registers(self, store_id: str, **filters: Any) -> Iterator[Dict[str, Any]]:
-        return PhysicalPosClient._iterate(
-            lambda **f: self.list_registers(store_id, **f), filters
-        )
+        return PhysicalPosClient._iterate(lambda **f: self.list_registers(store_id, **f), filters)
 
     def create_register(
         self,
@@ -273,7 +269,9 @@ class PhysicalPosManagementClient:
         **fields: Any,
     ) -> PhysicalPosWriteResult:
         """Creates a logical terminal (keyed, 201): ``code``, ``display_name``, optional ``vendor_code``, ``virtual_serial``, ``vendor_terminal_ref``."""
-        return self._keyed("/terminals", _merge(request, fields), _CREATE_TERMINAL, idempotency_key, 201)
+        return self._keyed(
+            "/terminals", _merge(request, fields), _CREATE_TERMINAL, idempotency_key, 201
+        )
 
     def get_terminal(self, terminal_id: str) -> Dict[str, Any]:
         """``{terminal, acquirers: {items, pageInfo}}``."""
@@ -300,7 +298,9 @@ class PhysicalPosManagementClient:
         path = f"/terminals/{s.path_id(terminal_id, 'terminal_id')}/acquirers"
         return Page(self._get(path, s.query(filters, "list_terminal_acquirers")))
 
-    def iterate_terminal_acquirers(self, terminal_id: str, **filters: Any) -> Iterator[Dict[str, Any]]:
+    def iterate_terminal_acquirers(
+        self, terminal_id: str, **filters: Any
+    ) -> Iterator[Dict[str, Any]]:
         return PhysicalPosClient._iterate(
             lambda **f: self.list_terminal_acquirers(terminal_id, **f), filters
         )
@@ -384,7 +384,9 @@ class PhysicalPosManagementClient:
         """Registers a device (keyed, 201): ``vendor_code``, ``device_model_id``, ``serial_number``,
         ``integration_channel``, optional ``display_name``, ``external_ref``, ``store_id``,
         ``register_id``, ``channel_variant``, ``app_mode``."""
-        return self._keyed("/devices", _merge(request, fields), _CREATE_DEVICE, idempotency_key, 201)
+        return self._keyed(
+            "/devices", _merge(request, fields), _CREATE_DEVICE, idempotency_key, 201
+        )
 
     def get_device(self, device_id: str) -> Dict[str, Any]:
         """The device detail. Only this read fills ``presence``.
@@ -404,7 +406,9 @@ class PhysicalPosManagementClient:
         self, device_id: str, request: Optional[Mapping[str, Any]] = None, **fields: Any
     ) -> Dict[str, Any]:
         path = f"/devices/{s.path_id(device_id, 'device_id')}"
-        return s.member(self._send("PATCH", path, _merge(request, fields), _UPDATE_DEVICE), "device")
+        return s.member(
+            self._send("PATCH", path, _merge(request, fields), _UPDATE_DEVICE), "device"
+        )
 
     def assign_device(
         self, device_id: str, request: Optional[Mapping[str, Any]] = None, **fields: Any
@@ -451,7 +455,9 @@ class PhysicalPosManagementClient:
         path = f"/devices/{s.path_id(device_id, 'device_id')}/assignments"
         return Page(self._get(path, s.query(filters, "list_device_assignments")))
 
-    def iterate_device_assignments(self, device_id: str, **filters: Any) -> Iterator[Dict[str, Any]]:
+    def iterate_device_assignments(
+        self, device_id: str, **filters: Any
+    ) -> Iterator[Dict[str, Any]]:
         return PhysicalPosClient._iterate(
             lambda **f: self.list_device_assignments(device_id, **f), filters
         )
@@ -499,4 +505,8 @@ class PhysicalPosManagementClient:
     @staticmethod
     def _array(response: Any) -> List[Dict[str, Any]]:
         payload = data_of(response)
-        return [dict(item) for item in payload if isinstance(item, Mapping)] if isinstance(payload, list) else []
+        return (
+            [dict(item) for item in payload if isinstance(item, Mapping)]
+            if isinstance(payload, list)
+            else []
+        )

@@ -16,23 +16,27 @@ import pytest
 
 from lunixi.errors import ConfigurationError, PhysicalPosCardDataRejectedError
 from lunixi.physical_pos import (
-    PHYSICAL_POS_EVENT_TYPES,
     PAYMENT_FIELDS,
     PAYMENT_TARGET_FIELDS,
+    PHYSICAL_POS_EVENT_TYPES,
     PHYSICAL_POS_FILTERS,
     PHYSICAL_POS_NOT_STARTED_CODES,
     REFUND_ITEM_FIELDS,
     REVERSAL_FIELDS,
     SALE_ITEM_FIELDS,
+    _support,
+    card_data,
     contains_pan_like_value,
     find_card_data_field,
     is_card_data_key,
+    management,
 )
-from lunixi.physical_pos import _support, card_data, management
 from lunixi.physical_pos.webhook import webhook_original
 
 FIXTURE = json.loads(
-    (pathlib.Path(__file__).parent / "fixtures" / "physical-pos-parity.json").read_text(encoding="utf-8")
+    (pathlib.Path(__file__).parent / "fixtures" / "physical-pos-parity.json").read_text(
+        encoding="utf-8"
+    )
 )
 KEY = "pos-parity-key-0001"
 SALE = {
@@ -85,7 +89,9 @@ def test_card_data_path_cases(case):
     assert find_card_data_field(case["body"]) == case["field"]
 
 
-@pytest.mark.parametrize("case", FIXTURE["panValueCases"], ids=lambda c: f'{c["mode"]}:{c["value"]}')
+@pytest.mark.parametrize(
+    "case", FIXTURE["panValueCases"], ids=lambda c: f"{c['mode']}:{c['value']}"
+)
 def test_pan_value_cases(case):
     assert contains_pan_like_value(case["value"], case["mode"]) is case["pan"]
 

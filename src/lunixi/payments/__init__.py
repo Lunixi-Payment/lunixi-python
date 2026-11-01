@@ -152,7 +152,13 @@ class PaymentsClient:
     def list(self, **filters: Any) -> dict[str, Any]:
         return self._api.request("GET", _BASE, query=filters)
 
-    def capture(self, payment_id: str, amount: str | _OmittedAmount = _OMITTED_AMOUNT, *, idempotency_key: str) -> dict[str, Any]:
+    def capture(
+        self,
+        payment_id: str,
+        amount: str | _OmittedAmount = _OMITTED_AMOUNT,
+        *,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
         return self._api.request(
             "POST",
             _BASE + "/" + identifier(payment_id) + "/capture",
@@ -162,7 +168,12 @@ class PaymentsClient:
         )
 
     def refund(
-        self, payment_id: str, amount: str | _OmittedAmount = _OMITTED_AMOUNT, *, idempotency_key: str, reason: Optional[str] = None
+        self,
+        payment_id: str,
+        amount: str | _OmittedAmount = _OMITTED_AMOUNT,
+        *,
+        idempotency_key: str,
+        reason: Optional[str] = None,
     ) -> dict[str, Any]:
         return self._refund(
             _BASE + "/" + identifier(payment_id) + "/refund", amount, idempotency_key, reason
@@ -200,7 +211,9 @@ class PaymentsClient:
             reason,
         )
 
-    def _refund(self, path: str, amount: str | _OmittedAmount, key: str, reason: Optional[str]) -> dict[str, Any]:
+    def _refund(
+        self, path: str, amount: str | _OmittedAmount, key: str, reason: Optional[str]
+    ) -> dict[str, Any]:
         body: dict[str, Any] = {} if amount is _OMITTED_AMOUNT else {"amount": amount_minor(amount)}
         if reason is not None:
             if not isinstance(reason, str) or len(reason) > 500:

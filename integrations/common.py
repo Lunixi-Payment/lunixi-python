@@ -255,7 +255,9 @@ INSERT OR IGNORE INTO sample_stock(sku,quantity) VALUES('sample-product',100);""
 
     def start(self, key: str, owner: Any) -> dict[str, Any]:
         row = self.owned(key, owner)
-        snapshot = OrderSnapshot(self.settings.merchant_id, key, str(row["amount"]), row["currency"])
+        snapshot = OrderSnapshot(
+            self.settings.merchant_id, key, str(row["amount"]), row["currency"]
+        )
         result = self.service.start(
             key,
             snapshot,

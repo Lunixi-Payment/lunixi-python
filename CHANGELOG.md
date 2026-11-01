@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 — 2026-11-01
+
+- Remove unused imports, normalize import ordering and format the money/Physical POS changes for release CI without changing strict numeric/null rejection.
+- Keep the Physical POS outcome invariant enforced when Python assertions are disabled, and include the 1.0 migration guide in the source distribution.
+- Update installation and exact-tag publishing guidance for the correction release.
+
 ## 1.0.0 — 2026-11-01
 
 - Physical POS payment/item/filter/report money uses canonical signed64 strings; raw numeric/null amounts are rejected before HTTP, malformed monetary 2xx payment replies retain UNKNOWN semantics, and signed webhooks are checked after signature verification.

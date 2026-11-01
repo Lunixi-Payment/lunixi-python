@@ -42,14 +42,22 @@ VOID = {"operation": "VOID", "currency": "TRY"}
 
 
 def payment(**overrides):
-    view = {"paymentId": PAYMENT_ID, "rootPaymentId": PAYMENT_ID, "operation": "SALE", "paymentStatus": "NOT_STARTED"}
+    view = {
+        "paymentId": PAYMENT_ID,
+        "rootPaymentId": PAYMENT_ID,
+        "operation": "SALE",
+        "paymentStatus": "NOT_STARTED",
+    }
     view.update(overrides)
     return view
 
 
 def accepted(replayed=False):
     status = 200 if replayed else 202
-    return json_response(envelope({"payment": payment(), "replayed": replayed}, statusCode=status), status_code=status)
+    return json_response(
+        envelope({"payment": payment(), "replayed": replayed}, statusCode=status),
+        status_code=status,
+    )
 
 
 def failure(status, code, details=None, headers=None):
@@ -80,8 +88,12 @@ def query_of(request):
         raw(202, b"<html>proxy page</html>"),
         raw(202, b""),
         json_response(envelope({"replayed": False}, statusCode=202), status_code=202),
-        json_response(envelope({"payment": None, "replayed": False}, statusCode=202), status_code=202),
-        json_response(envelope({"payment": {"paymentStatus": "NOT_STARTED"}}, statusCode=202), status_code=202),
+        json_response(
+            envelope({"payment": None, "replayed": False}, statusCode=202), status_code=202
+        ),
+        json_response(
+            envelope({"payment": {"paymentStatus": "NOT_STARTED"}}, statusCode=202), status_code=202
+        ),
         json_response(envelope({"payment": {"paymentId": ""}}, statusCode=202), status_code=202),
         json_response(envelope([1, 2]), status_code=202),
     ],
@@ -138,7 +150,9 @@ def test_an_uncertain_attempt_then_429_is_an_unknown_outcome(client_factory):
 
 
 def test_no_answer_then_409_is_an_unknown_outcome(client_factory):
-    _, client = client_factory(transport_failure(), failure(409, "physical_pos.idempotency_mismatch"))
+    _, client = client_factory(
+        transport_failure(), failure(409, "physical_pos.idempotency_mismatch")
+    )
     with pytest.raises(PhysicalPosOutcomeUnknownError) as caught:
         client.physical_pos().create_reversal(PAYMENT_ID, VOID, idempotency_key=KEY)
     assert caught.value.idempotency_key == KEY
@@ -158,9 +172,7 @@ def test_a_not_started_503_then_4xx_is_the_plain_refusal(client_factory):
 
 
 def test_a_not_started_503_then_success_is_a_success(client_factory):
-    transport, client = client_factory(
-        failure(503, "physical_pos.signing.unavailable"), accepted()
-    )
+    transport, client = client_factory(failure(503, "physical_pos.signing.unavailable"), accepted())
     result = client.physical_pos().create_payment(SALE, idempotency_key=KEY)
     assert result.status_code == 202 and result.accepted
     assert sent_keys(transport) == [KEY, KEY]
@@ -175,14 +187,18 @@ def test_a_not_started_503_alone_keeps_its_class(client_factory):
 
 
 def test_a_4xx_stops_the_loop_at_once(client_factory):
-    transport, client = client_factory(failure(400, "physical_pos.payment.amount_invalid", {"field": "amountMinor"}))
+    transport, client = client_factory(
+        failure(400, "physical_pos.payment.amount_invalid", {"field": "amountMinor"})
+    )
     with pytest.raises(ApiError):
         client.physical_pos().create_payment(SALE, idempotency_key=KEY)
     assert len(sent_keys(transport)) == 1
 
 
 def test_the_transport_never_retries_on_its_own_inside_the_loop(client_factory):
-    transport, client = client_factory(transport_failure(), transport_failure(), transport_failure())
+    transport, client = client_factory(
+        transport_failure(), transport_failure(), transport_failure()
+    )
     with pytest.raises(PhysicalPosOutcomeUnknownError):
         client.physical_pos().create_payment(SALE, idempotency_key=KEY)
     assert len(sent_keys(transport)) == 3  # 1 + max_retries (2), not 3 × 3
@@ -226,8 +242,15 @@ def test_a_cancel_without_a_key_gets_one_reused_by_its_attempts(client_factory):
         (
             {
                 "items": [
-                    {"lineNo": 1, "name": "card 4111-1111-1111-1111", "quantityMilli": 1000, "unitCode": "C62",
-                     "unitPriceMinor": "4500", "taxGroupCode": "KDV20", "lineTotalMinor": "4500"}
+                    {
+                        "lineNo": 1,
+                        "name": "card 4111-1111-1111-1111",
+                        "quantityMilli": 1000,
+                        "unitCode": "C62",
+                        "unitPriceMinor": "4500",
+                        "taxGroupCode": "KDV20",
+                        "lineTotalMinor": "4500",
+                    }
                 ]
             },
             "items[0].name",
@@ -235,8 +258,15 @@ def test_a_cancel_without_a_key_gets_one_reused_by_its_attempts(client_factory):
         (
             {
                 "items": [
-                    {"lineNo": 1, "name": "Tea", "quantityMilli": 1000, "unitCode": "C62",
-                     "unitPriceMinor": "4500", "taxGroupCode": "4111111111111111", "lineTotalMinor": "4500"}
+                    {
+                        "lineNo": 1,
+                        "name": "Tea",
+                        "quantityMilli": 1000,
+                        "unitCode": "C62",
+                        "unitPriceMinor": "4500",
+                        "taxGroupCode": "4111111111111111",
+                        "lineTotalMinor": "4500",
+                    }
                 ]
             },
             "items[0].taxGroupCode",
@@ -255,8 +285,15 @@ def test_a_card_number_in_a_value_is_refused_without_echo(client_factory, change
 
 def test_a_barcode_in_an_item_name_is_not_a_card_number(client_factory):
     transport, client = client_factory(accepted())
-    item = {"lineNo": 1, "name": "Simit 8691234567012", "quantityMilli": 1000, "unitCode": "C62",
-            "unitPriceMinor": "4500", "taxGroupCode": "KDV1", "lineTotalMinor": "4500"}
+    item = {
+        "lineNo": 1,
+        "name": "Simit 8691234567012",
+        "quantityMilli": 1000,
+        "unitCode": "C62",
+        "unitPriceMinor": "4500",
+        "taxGroupCode": "KDV1",
+        "lineTotalMinor": "4500",
+    }
     client.physical_pos().create_payment(dict(SALE, items=[item]), idempotency_key=KEY)
     assert len(transport.requests_to("/physical-pos/payments")) == 1
 
@@ -292,7 +329,13 @@ def test_a_reversal_merchant_reference_is_scanned(client_factory):
 
 
 def test_report_dates_are_the_given_calendar_day(client_factory):
-    report = {"environment": "LIVE", "dateFrom": "2026-10-24", "dateTo": "2026-10-30", "rows": [], "amountTotals": []}
+    report = {
+        "environment": "LIVE",
+        "dateFrom": "2026-10-24",
+        "dateTo": "2026-10-30",
+        "rows": [],
+        "amountTotals": [],
+    }
     transport, client = client_factory(json_response(envelope(report)))
     late = dt.datetime(2026, 10, 30, 23, 30, tzinfo=dt.timezone(dt.timedelta(hours=-5)))
     client.physical_pos().get_tax_summary(date_from=dt.date(2026, 10, 24), date_to=late)
@@ -301,9 +344,13 @@ def test_report_dates_are_the_given_calendar_day(client_factory):
 
 def test_created_filters_take_an_aware_datetime_as_utc(client_factory):
     info = {"hasMore": False, "nextCursor": None, "totalCount": None}
-    transport, client = client_factory(json_response(envelope({"items": [], "pageInfo": info}, pageInfo=info)))
+    transport, client = client_factory(
+        json_response(envelope({"items": [], "pageInfo": info}, pageInfo=info))
+    )
     istanbul = dt.timezone(dt.timedelta(hours=3))
-    client.physical_pos().list_payments(created_from=dt.datetime(2026, 10, 1, 3, 0, 0, 250000, tzinfo=istanbul))
+    client.physical_pos().list_payments(
+        created_from=dt.datetime(2026, 10, 1, 3, 0, 0, 250000, tzinfo=istanbul)
+    )
     assert query_of(transport.last) == {"createdFrom": "2026-10-01T00:00:00.250Z"}
     with pytest.raises(ConfigurationError):
         client.physical_pos().list_payments(created_from=dt.datetime(2026, 10, 1))
@@ -314,7 +361,13 @@ def test_created_filters_take_an_aware_datetime_as_utc(client_factory):
 def test_empty_and_null_values_are_not_sent(client_factory):
     transport, client = client_factory(accepted())
     client.physical_pos().create_payment(
-        dict(SALE, merchantReference="", instrument=None, allowDuplicateReference=None, terminalAcquirerId=""),
+        dict(
+            SALE,
+            merchantReference="",
+            instrument=None,
+            allowDuplicateReference=None,
+            terminalAcquirerId="",
+        ),
         idempotency_key=KEY,
     )
     body = json.loads(transport.last.body)
@@ -358,4 +411,6 @@ def test_invalid_money_read_helper_raises_configuration_error():
     from lunixi.physical_pos import _support
 
     with pytest.raises(ConfigurationError):
-        _support.member({"data": {"payment": {"paymentId": PAYMENT_ID, "amountMinor": 4500}}}, "payment")
+        _support.member(
+            {"data": {"payment": {"paymentId": PAYMENT_ID, "amountMinor": 4500}}}, "payment"
+        )

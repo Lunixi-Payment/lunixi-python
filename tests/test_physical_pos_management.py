@@ -99,10 +99,21 @@ class TestStores:
         transport, client = client_factory(
             answer({"store": STORE, "archivedRegisterCount": 2}),
             answer({"store": STORE}),
-            answer({"store": STORE, "registerSummary": {"activeCount": 1, "archivedCount": 0}, "assignedDeviceCount": 0}),
+            answer(
+                {
+                    "store": STORE,
+                    "registerSummary": {"activeCount": 1, "archivedCount": 0},
+                    "assignedDeviceCount": 0,
+                }
+            ),
         )
         mgmt = client.physical_pos_management()
-        assert mgmt.archive_store(STORE_ID, {"rowVersion": 1, "reasonCode": "STORE_CLOSED"})["archivedRegisterCount"] == 2
+        assert (
+            mgmt.archive_store(STORE_ID, {"rowVersion": 1, "reasonCode": "STORE_CLOSED"})[
+                "archivedRegisterCount"
+            ]
+            == 2
+        )
         assert transport.last.path == f"{BASE}/stores/{STORE_ID}/archive"
         assert mgmt.restore_store(STORE_ID, row_version=2, reason_code="REOPENED")["id"] == STORE_ID
         assert transport.last.path == f"{BASE}/stores/{STORE_ID}/restore"
@@ -113,7 +124,9 @@ class TestStores:
         transport, client = client_factory(
             answer({"items": [dict(STORE, registerCount=1)], "pageInfo": info}, pageInfo=info)
         )
-        page = client.physical_pos_management().list_stores(include_total=True, status="ACTIVE", q="IST")
+        page = client.physical_pos_management().list_stores(
+            include_total=True, status="ACTIVE", q="IST"
+        )
         assert query_of(transport.last) == {"includeTotal": "true", "status": "ACTIVE", "q": "IST"}
         assert page.total_count == 1
 
@@ -126,7 +139,14 @@ class TestStores:
 
 class TestRegisters:
     def test_register_routes(self, client_factory):
-        register = {"id": REGISTER_ID, "storeId": STORE_ID, "code": "K1", "name": "Till 1", "registerStatus": "ACTIVE", "rowVersion": 1}
+        register = {
+            "id": REGISTER_ID,
+            "storeId": STORE_ID,
+            "code": "K1",
+            "name": "Till 1",
+            "registerStatus": "ACTIVE",
+            "rowVersion": 1,
+        }
         info = {"hasMore": False, "nextCursor": None, "totalCount": None}
         transport, client = client_factory(
             answer({"register": register, "replayed": False}, 201),
@@ -140,7 +160,10 @@ class TestRegisters:
         assert created.status_code == 201
         assert UUID_V4.fullmatch(transport.last.header("Idempotency-Key"))
         mgmt.update_register(REGISTER_ID, row_version=1, name="Till A")
-        assert (transport.last.method, transport.last.path) == ("PATCH", f"{BASE}/registers/{REGISTER_ID}")
+        assert (transport.last.method, transport.last.path) == (
+            "PATCH",
+            f"{BASE}/registers/{REGISTER_ID}",
+        )
         mgmt.archive_register(REGISTER_ID, row_version=2, reason_code="REGISTER_REMOVED")
         assert transport.last.path == f"{BASE}/registers/{REGISTER_ID}/archive"
         assert mgmt.list_registers(STORE_ID, status="ACTIVE").items[0]["id"] == REGISTER_ID
@@ -149,10 +172,20 @@ class TestRegisters:
 class TestTerminals:
     def test_terminal_routes(self, client_factory):
         terminal = {"id": TERMINAL_ID, "terminalCode": "T1", "rowVersion": 1}
-        acquirer = {"id": ACQUIRER_ID, "terminalId": TERMINAL_ID, "currencies": ["TRY"], "rowVersion": 1}
+        acquirer = {
+            "id": ACQUIRER_ID,
+            "terminalId": TERMINAL_ID,
+            "currencies": ["TRY"],
+            "rowVersion": 1,
+        }
         transport, client = client_factory(
             answer({"terminal": terminal, "replayed": False}, 201),
-            answer({"terminal": terminal, "acquirers": {"items": [acquirer], "pageInfo": {"hasMore": False}}}),
+            answer(
+                {
+                    "terminal": terminal,
+                    "acquirers": {"items": [acquirer], "pageInfo": {"hasMore": False}},
+                }
+            ),
             answer({"acquirer": acquirer, "replayed": False}, 201),
             answer({"acquirer": acquirer}),
             answer({"terminal": terminal, "link": {"id": "l1", "deviceId": DEVICE_ID}}),
@@ -161,7 +194,11 @@ class TestTerminals:
         )
         mgmt = client.physical_pos_management()
         mgmt.create_terminal(code="T1", display_name="Front desk", vendor_code="PAVO")
-        assert json.loads(transport.last.body) == {"code": "T1", "displayName": "Front desk", "vendorCode": "PAVO"}
+        assert json.loads(transport.last.body) == {
+            "code": "T1",
+            "displayName": "Front desk",
+            "vendorCode": "PAVO",
+        }
         assert mgmt.get_terminal(TERMINAL_ID)["acquirers"]["items"][0]["id"] == ACQUIRER_ID
         added = mgmt.add_terminal_acquirer(
             TERMINAL_ID,
@@ -175,12 +212,20 @@ class TestTerminals:
         assert added["acquirer"]["id"] == ACQUIRER_ID
         mgmt.update_terminal_acquirer(ACQUIRER_ID, row_version=1, label=None, status="DISABLED")
         assert transport.last.path == f"{BASE}/terminal-acquirers/{ACQUIRER_ID}"
-        assert json.loads(transport.last.body) == {"rowVersion": 1, "label": None, "status": "DISABLED"}
-        linked = mgmt.change_terminal_device(TERMINAL_ID, row_version=1, device_id=DEVICE_ID, reason_code="INITIAL_SETUP")
+        assert json.loads(transport.last.body) == {
+            "rowVersion": 1,
+            "label": None,
+            "status": "DISABLED",
+        }
+        linked = mgmt.change_terminal_device(
+            TERMINAL_ID, row_version=1, device_id=DEVICE_ID, reason_code="INITIAL_SETUP"
+        )
         assert transport.last.path == f"{BASE}/terminals/{TERMINAL_ID}/device-link"
         assert transport.last.header("Idempotency-Key") is None
         assert linked["link"]["deviceId"] == DEVICE_ID
-        closed = mgmt.close_terminal_device_link(TERMINAL_ID, row_version=2, reason_code="DEVICE_FAULT")
+        closed = mgmt.close_terminal_device_link(
+            TERMINAL_ID, row_version=2, reason_code="DEVICE_FAULT"
+        )
         assert transport.last.path == f"{BASE}/terminals/{TERMINAL_ID}/device-link/close"
         assert transport.last.header("Idempotency-Key") == closed.idempotency_key
         assert closed.status_code == 200 and closed["link"] is None
@@ -191,7 +236,11 @@ class TestTerminals:
         transport, client = client_factory()
         with pytest.raises(ConfigurationError):
             client.physical_pos_management().add_terminal_acquirer(
-                TERMINAL_ID, vendor_acquirer_ref="62", merchant_number="1", terminal_number="2", currencies="TRY"
+                TERMINAL_ID,
+                vendor_acquirer_ref="62",
+                merchant_number="1",
+                terminal_number="2",
+                currencies="TRY",
             )
         assert transport.requests == []
 
@@ -220,30 +269,53 @@ class TestDevices:
         assert created.status_code == 201 and created["device"]["id"] == DEVICE_ID
         assert mgmt.update_device(DEVICE_ID, row_version=1, display_name=None)["id"] == DEVICE_ID
         assert json.loads(transport.last.body) == {"rowVersion": 1, "displayName": None}
-        assigned = mgmt.assign_device(DEVICE_ID, row_version=2, store_id=STORE_ID, register_id=None, reason_code="INITIAL_SETUP")
-        assert json.loads(transport.last.body) == {"rowVersion": 2, "storeId": STORE_ID, "registerId": None, "reasonCode": "INITIAL_SETUP"}
+        assigned = mgmt.assign_device(
+            DEVICE_ID,
+            row_version=2,
+            store_id=STORE_ID,
+            register_id=None,
+            reason_code="INITIAL_SETUP",
+        )
+        assert json.loads(transport.last.body) == {
+            "rowVersion": 2,
+            "storeId": STORE_ID,
+            "registerId": None,
+            "reasonCode": "INITIAL_SETUP",
+        }
         assert assigned["assignment"]["id"] == "a1"
-        stored = mgmt.close_device_assignment(DEVICE_ID, row_version=3, reason_code="MOVED_TO_STORAGE", idempotency_key=KEY)
+        stored = mgmt.close_device_assignment(
+            DEVICE_ID, row_version=3, reason_code="MOVED_TO_STORAGE", idempotency_key=KEY
+        )
         assert transport.last.path == f"{BASE}/devices/{DEVICE_ID}/assignment/close"
         assert stored["closedAssignment"]["id"] == "a1"
-        mgmt.change_device_lifecycle(DEVICE_ID, row_version=4, target="SUSPENDED", reason_code="DEVICE_LOST")
+        mgmt.change_device_lifecycle(
+            DEVICE_ID, row_version=4, target="SUSPENDED", reason_code="DEVICE_LOST"
+        )
         assert transport.last.path == f"{BASE}/devices/{DEVICE_ID}/lifecycle"
         retired = mgmt.retire_device(DEVICE_ID, row_version=5, reason_code="END_OF_LIFE")
         assert retired.replayed is True
         assert transport.last.path == f"{BASE}/devices/{DEVICE_ID}/retire"
         mgmt.list_devices(lifecycle_status="ACTIVE", include_total=False, q="PAV")
-        assert query_of(transport.last) == {"lifecycleStatus": "ACTIVE", "includeTotal": "false", "q": "PAV"}
+        assert query_of(transport.last) == {
+            "lifecycleStatus": "ACTIVE",
+            "includeTotal": "false",
+            "q": "PAV",
+        }
 
     def test_create_device_requires_the_channel(self, client_factory):
         transport, client = client_factory()
         with pytest.raises(ConfigurationError):
-            client.physical_pos_management().create_device(vendor_code="PAVO", device_model_id="m1", serial_number="S1")
+            client.physical_pos_management().create_device(
+                vendor_code="PAVO", device_model_id="m1", serial_number="S1"
+            )
         assert transport.requests == []
 
     def test_card_data_is_refused_on_management_bodies(self, client_factory):
         transport, client = client_factory()
         with pytest.raises(PhysicalPosCardDataRejectedError) as caught:
-            client.physical_pos_management().update_device(DEVICE_ID, row_version=1, card_number="x")
+            client.physical_pos_management().update_device(
+                DEVICE_ID, row_version=1, card_number="x"
+            )
         assert caught.value.field == "card_number"
         assert transport.requests == []
 
@@ -257,7 +329,9 @@ class TestDevices:
 class TestCatalogAndOverview:
     def test_catalog_returns_bare_arrays(self, client_factory):
         transport, client = client_factory(
-            answer([{"code": "PAVO", "displayName": "Pavo", "status": "ACTIVE", "fallbackImage": None}]),
+            answer(
+                [{"code": "PAVO", "displayName": "Pavo", "status": "ACTIVE", "fallbackImage": None}]
+            ),
             answer([{"id": "m1", "vendorCode": "PAVO"}]),
             answer([{"acquirerCode": "AKBANK", "displayName": "Akbank"}]),
             answer({"overview": {"stores": {"active": 1, "archived": 0}, "transactions": None}}),
@@ -272,10 +346,17 @@ class TestCatalogAndOverview:
         assert transport.last.path == f"{BASE}/overview"
 
     def test_a_conflict_keeps_its_class_and_gets_the_key(self, client_factory):
-        body = {"status": "failure", "code": "physical_pos.store.code_taken", "statusCode": 409, "message": "x"}
+        body = {
+            "status": "failure",
+            "code": "physical_pos.store.code_taken",
+            "statusCode": 409,
+            "message": "x",
+        }
         _, client = client_factory(json_response(body, status_code=409))
         with pytest.raises(Exception) as caught:
-            client.physical_pos_management().create_store(code="IST-01", name="x", idempotency_key=KEY)
+            client.physical_pos_management().create_store(
+                code="IST-01", name="x", idempotency_key=KEY
+            )
         assert caught.value.code == "physical_pos.store.code_taken"
         assert caught.value.idempotency_key == KEY
         assert not isinstance(caught.value, ValidationError)

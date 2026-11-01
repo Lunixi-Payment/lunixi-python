@@ -1,4 +1,4 @@
-include README.md README.tr.md CHANGELOG.md LICENSE SECURITY.md CONTRIBUTING.md requirements-dev.lock
+include README.md README.tr.md CHANGELOG.md MIGRATION-1.0.md LICENSE SECURITY.md CONTRIBUTING.md requirements-dev.lock
 recursive-include docs *.md
 recursive-include integrations *.py *.html *.txt
 recursive-include samples *.py *.md

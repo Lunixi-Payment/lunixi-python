@@ -65,7 +65,9 @@ def envelope(**overrides):
 def signed(body):
     raw = json.dumps(body, separators=(",", ":")).encode()
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
-    signature = hmac.new(SECRET.encode(), f"{EVENT_ID}.{timestamp}.".encode() + raw, hashlib.sha256).hexdigest()
+    signature = hmac.new(
+        SECRET.encode(), f"{EVENT_ID}.{timestamp}.".encode() + raw, hashlib.sha256
+    ).hexdigest()
     headers = {
         "x-lunixi-event-id": EVENT_ID,
         "x-lunixi-event-type": body.get("type", ""),
@@ -85,7 +87,10 @@ def test_catalogue():
     assert "physical_pos.payment.created" not in PHYSICAL_POS_EVENT_TYPES
     assert "physical_pos.payment.in_progress" not in PHYSICAL_POS_EVENT_TYPES
     assert PhysicalPosEvents.PAYMENT_PARTIALLY_APPROVED == "physical_pos.payment.partially_approved"
-    assert PhysicalPosEvents.FISCAL_DOCUMENT_ACTION_REQUIRED == "physical_pos.fiscal_document.action_required"
+    assert (
+        PhysicalPosEvents.FISCAL_DOCUMENT_ACTION_REQUIRED
+        == "physical_pos.fiscal_document.action_required"
+    )
 
 
 def test_a_signed_event_is_verified_and_read():
@@ -151,7 +156,9 @@ def test_a_wrong_secret_is_refused():
         parse_webhook_event(raw, headers, "whsec_synthetic_other_secret")
 
 
-@pytest.mark.parametrize("drop", ["x-lunixi-signature", "x-lunixi-signature-timestamp", "x-lunixi-event-id"])
+@pytest.mark.parametrize(
+    "drop", ["x-lunixi-signature", "x-lunixi-signature-timestamp", "x-lunixi-event-id"]
+)
 def test_a_forged_envelope_without_signature_headers_is_refused(drop):
     raw, headers = signed(envelope())
     del headers[drop]
@@ -215,7 +222,10 @@ def test_a_deeply_nested_payload_json_is_a_verification_error():
 
 def test_fiscal_and_future_types_get_a_category():
     raw, headers = signed(
-        envelope(type=PhysicalPosEvents.FISCAL_DOCUMENT_ISSUED, data={"documentId": "d1", "historySeq": 2})
+        envelope(
+            type=PhysicalPosEvents.FISCAL_DOCUMENT_ISSUED,
+            data={"documentId": "d1", "historySeq": 2},
+        )
     )
     fiscal = parse_webhook_event(raw, headers, SECRET)
     assert fiscal.category == "fiscal_document"

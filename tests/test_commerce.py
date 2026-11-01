@@ -232,7 +232,9 @@ def test_fee_and_split_parent_require_complete_balanced_evidence():
         "metadata": {"lunixiCommerce": {"fingerprint": order.fingerprint}},
     }
     assert evaluate(
-        order, "pi_parent", {"data": p, "details": {"capturedAmount": "2090", "refundedAmount": "0"}}
+        order,
+        "pi_parent",
+        {"data": p, "details": {"capturedAmount": "2090", "refundedAmount": "0"}},
     ).paid
     p["metadata"] = {}
     with pytest.raises(CommerceError):

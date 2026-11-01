@@ -163,7 +163,9 @@ class ApiClient:
             if "amount" in body or financial.endswith(("/intents", "/direct/payment")):
                 amount_minor(body.get("amount"))
         if max_retries is not None and (
-            isinstance(max_retries, bool) or not isinstance(max_retries, int) or not 0 <= max_retries <= 5
+            isinstance(max_retries, bool)
+            or not isinstance(max_retries, int)
+            or not 0 <= max_retries <= 5
         ):
             raise ConfigurationError("max_retries must be an integer from 0 to 5.")
         retry_limit = self._config.max_retries if max_retries is None else max_retries
@@ -171,7 +173,17 @@ class ApiClient:
         signed_path = build_path(path, query)
         url = self._config.url_for(signed_path)
         from .validation import validate_money_fields
-        fiat_route = any(path == base or path.startswith(base + "/") for base in ("/api/v1/payments", "/api/v1/wallet", "/api/v1/insurance", "/api/v1/bank-connect", "/api/v1/fraud"))
+
+        fiat_route = any(
+            path == base or path.startswith(base + "/")
+            for base in (
+                "/api/v1/payments",
+                "/api/v1/wallet",
+                "/api/v1/insurance",
+                "/api/v1/bank-connect",
+                "/api/v1/fraud",
+            )
+        )
         if fiat_route:
             validate_money_fields(body)
             validate_money_fields(query)

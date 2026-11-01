@@ -210,7 +210,9 @@ class PhysicalPosVoidAfterSettlementError(ApiError):
 
     CODE = "physical_pos.payment.void_after_settlement"
 
-    def __init__(self, message: str, *, allowed_operation: Optional[str] = None, **kwargs: Any) -> None:
+    def __init__(
+        self, message: str, *, allowed_operation: Optional[str] = None, **kwargs: Any
+    ) -> None:
         kwargs.setdefault("code", self.CODE)
         super().__init__(message, **kwargs)
         self.allowed_operation = allowed_operation

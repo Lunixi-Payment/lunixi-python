@@ -7,14 +7,20 @@ from lunixi.validation import amount_minor, decimal_to_minor, validate_money_fie
 LARGE = "9007199254740993"
 
 
-@pytest.mark.parametrize("value", [1, True, 1.5, "0", "-0", "01", "+1", " 1", "1.0", "1e3", "9223372036854775808"])
+@pytest.mark.parametrize(
+    "value", [1, True, 1.5, "0", "-0", "01", "+1", " 1", "1.0", "1e3", "9223372036854775808"]
+)
 def test_public_money_rejects_numbers_and_noncanonical_strings(value):
     with pytest.raises(ConfigurationError):
         CreateIntent(value, "TRY", "order").to_dict()
 
 
 def test_exact_currency_conversions_and_signed_balance():
-    for decimal, currency in [(LARGE, "JPY"), ("90071992547409.93", "TRY"), ("9007199254740.993", "KWD")]:
+    for decimal, currency in [
+        (LARGE, "JPY"),
+        ("90071992547409.93", "TRY"),
+        ("9007199254740.993", "KWD"),
+    ]:
         assert decimal_to_minor(decimal, currency) == LARGE
     assert amount_minor("-9007199254740993", signed=True) == "-9007199254740993"
     assert CreateIntent(LARGE, "TRY", "order").to_dict()["amount"] == LARGE
@@ -24,7 +30,9 @@ def test_exact_currency_conversions_and_signed_balance():
 
 
 def test_explicit_dto_fields_preserve_opaque_payloads_and_reject_numeric_responses():
-    validate_money_fields({"amount": LARGE, "metadata": {"amount": 1}, "providerPayload": {"amount": 1}, "rate": 1.5})
+    validate_money_fields(
+        {"amount": LARGE, "metadata": {"amount": 1}, "providerPayload": {"amount": 1}, "rate": 1.5}
+    )
     with pytest.raises(ConfigurationError):
         validate_money_fields({"data": {"amount": 1}}, response=True)
 
@@ -54,5 +62,10 @@ def test_absent_capture_and_refund_mean_remaining_but_zero_is_invalid():
 def test_raw_mutation_null_is_rejected_before_auth_or_transport(client_factory, operation):
     transport, client = client_factory()
     with pytest.raises(ConfigurationError):
-        client.api().request("POST", f"/api/v1/payments/pi-1/{operation}", {"amount": None}, idempotency_key="stable-operation-key")
+        client.api().request(
+            "POST",
+            f"/api/v1/payments/pi-1/{operation}",
+            {"amount": None},
+            idempotency_key="stable-operation-key",
+        )
     assert transport.requests == []

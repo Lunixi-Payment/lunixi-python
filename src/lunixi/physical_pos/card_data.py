@@ -230,7 +230,12 @@ def contains_pan_like_value(text: str, mode: str = PAN_SCAN_STRICT) -> bool:
         digits = candidate.replace(" ", "").replace("-", "")
         if not 13 <= len(digits) <= 19:
             continue
-        if mode == PAN_SCAN_ITEM_TEXT and digits == candidate and len(digits) <= 14 and _gtin_valid(digits):
+        if (
+            mode == PAN_SCAN_ITEM_TEXT
+            and digits == candidate
+            and len(digits) <= 14
+            and _gtin_valid(digits)
+        ):
             continue
         if _luhn_valid(digits):
             return True

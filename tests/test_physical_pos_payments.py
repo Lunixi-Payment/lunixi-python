@@ -157,7 +157,9 @@ class TestCreatePayment:
             client.physical_pos().create_payment(SALE, idempotency_key=None)  # type: ignore[arg-type]
         with pytest.raises(ConfigurationError):
             client.physical_pos().create_reversal(
-                PAYMENT_ID, {"operation": "VOID", "currency": "TRY"}, idempotency_key=None  # type: ignore[arg-type]
+                PAYMENT_ID,
+                {"operation": "VOID", "currency": "TRY"},
+                idempotency_key=None,  # type: ignore[arg-type]
             )
         assert transport.requests == []
 
@@ -187,7 +189,9 @@ class TestCreatePayment:
         }
 
     def test_a_replay_is_200_with_the_current_view(self, client_factory):
-        _, client = client_factory(write_answer(replayed=True, status=200, paymentStatus="APPROVED"))
+        _, client = client_factory(
+            write_answer(replayed=True, status=200, paymentStatus="APPROVED")
+        )
         result = client.physical_pos().create_payment(SALE, idempotency_key=KEY)
         assert result.status_code == 200
         assert result.accepted is False
@@ -203,11 +207,15 @@ class TestCreatePayment:
     def test_transport_retries_reuse_the_same_key(self, client_factory):
         transport, client = client_factory(transport_failure(), write_answer())
         result = client.physical_pos().create_payment(SALE, idempotency_key=KEY)
-        sent = [r.header("Idempotency-Key") for r in transport.requests_to("/physical-pos/payments")]
+        sent = [
+            r.header("Idempotency-Key") for r in transport.requests_to("/physical-pos/payments")
+        ]
         assert len(sent) == 2
         assert sent[0] == sent[1] == result.idempotency_key
 
-    @pytest.mark.parametrize("key", ["", "        ", " pos-key-1", "short", "has space key", "x" * 201, "tab\tkey-0001"])
+    @pytest.mark.parametrize(
+        "key", ["", "        ", " pos-key-1", "short", "has space key", "x" * 201, "tab\tkey-0001"]
+    )
     def test_an_invalid_key_is_refused_before_sending(self, client_factory, key):
         transport, client = client_factory()
         with pytest.raises(ConfigurationError):
@@ -252,7 +260,10 @@ class TestCardData:
             (dict(SALE, pan="x"), "pan"),
             (dict(SALE, card_cvv="x"), "card_cvv"),
             (dict(SALE, target={"deviceId": DEVICE_ID, "track2Data": "x"}), "target.track2Data"),
-            (dict(SALE, items=[SALE["items"][0], dict(SALE["items"][1], CVVCode="x")]), "items[1].CVVCode"),
+            (
+                dict(SALE, items=[SALE["items"][0], dict(SALE["items"][1], CVVCode="x")]),
+                "items[1].CVVCode",
+            ),
             (dict(SALE, expiry="12/30"), "expiry"),
             (dict(SALE, **{"4543600000001234": "x"}), "(body)"),
         ],
@@ -276,7 +287,9 @@ class TestCardData:
 
     def test_the_gateway_card_data_code_is_typed(self, client_factory):
         _, client = client_factory(
-            error_answer(400, "physical_pos.payment.card_data_rejected", {"field": "merchantReference"})
+            error_answer(
+                400, "physical_pos.payment.card_data_rejected", {"field": "merchantReference"}
+            )
         )
         with pytest.raises(PhysicalPosCardDataRejectedError) as caught:
             client.physical_pos().create_payment(SALE, idempotency_key=KEY)
@@ -336,7 +349,11 @@ class TestErrors:
 
     def test_a_definite_refusal_keeps_its_class_and_gets_the_key(self, client_factory):
         _, client = client_factory(
-            error_answer(409, "physical_pos.payment.device_busy", {"reason": "payment_in_progress", "retryAfterSeconds": 20})
+            error_answer(
+                409,
+                "physical_pos.payment.device_busy",
+                {"reason": "payment_in_progress", "retryAfterSeconds": 20},
+            )
         )
         with pytest.raises(ApiError) as caught:
             client.physical_pos().create_payment(SALE, idempotency_key=KEY)
@@ -347,12 +364,16 @@ class TestErrors:
 
     def test_a_void_of_a_settled_payment_is_typed(self, client_factory):
         transport, client = client_factory(
-            error_answer(409, "physical_pos.payment.void_after_settlement", {"allowedOperation": "REFUND"}),
+            error_answer(
+                409, "physical_pos.payment.void_after_settlement", {"allowedOperation": "REFUND"}
+            ),
             error_answer(409, "physical_pos.payment.void_after_settlement"),
         )
         pos = client.physical_pos()
         with pytest.raises(PhysicalPosVoidAfterSettlementError) as caught:
-            pos.create_reversal(PAYMENT_ID, {"operation": "VOID", "currency": "TRY"}, idempotency_key=KEY)
+            pos.create_reversal(
+                PAYMENT_ID, {"operation": "VOID", "currency": "TRY"}, idempotency_key=KEY
+            )
         assert isinstance(caught.value, ApiError)
         assert not isinstance(caught.value, PhysicalPosOutcomeUnknownError)
         assert caught.value.status_code == 409
@@ -361,7 +382,9 @@ class TestErrors:
         assert caught.value.idempotency_key == KEY
         assert len(transport.requests_to("/reversals")) == 1
         with pytest.raises(PhysicalPosVoidAfterSettlementError) as bare:
-            pos.create_reversal(PAYMENT_ID, {"operation": "VOID", "currency": "TRY"}, idempotency_key=KEY)
+            pos.create_reversal(
+                PAYMENT_ID, {"operation": "VOID", "currency": "TRY"}, idempotency_key=KEY
+            )
         assert bare.value.allowed_operation is None
 
     def test_a_read_5xx_is_not_an_unknown_outcome(self, client_factory):
@@ -375,7 +398,12 @@ class TestErrors:
 class TestReversalAndCancel:
     def test_item_refund(self, client_factory):
         transport, client = client_factory(
-            write_answer(paymentId=CHILD_ID, operation="REFUND", originalPaymentId=PAYMENT_ID, amountMinor="1500")
+            write_answer(
+                paymentId=CHILD_ID,
+                operation="REFUND",
+                originalPaymentId=PAYMENT_ID,
+                amountMinor="1500",
+            )
         )
         result = client.physical_pos().create_reversal(
             PAYMENT_ID,
@@ -397,13 +425,19 @@ class TestReversalAndCancel:
         transport, client = client_factory()
         with pytest.raises(ConfigurationError):
             client.physical_pos().create_reversal(
-                PAYMENT_ID, {"operation": "VOID", "currency": "TRY", "installmentCount": 3}, idempotency_key=KEY
+                PAYMENT_ID,
+                {"operation": "VOID", "currency": "TRY", "installmentCount": 3},
+                idempotency_key=KEY,
             )
         assert transport.requests == []
 
     def test_cancel_sends_an_empty_body_with_a_key(self, client_factory):
         transport, client = client_factory(
-            write_answer(status=200, paymentStatus="EXPIRED", statusReason="MERCHANT_CANCELLED_BEFORE_DISPATCH")
+            write_answer(
+                status=200,
+                paymentStatus="EXPIRED",
+                statusReason="MERCHANT_CANCELLED_BEFORE_DISPATCH",
+            )
         )
         result = client.physical_pos().cancel_payment(PAYMENT_ID)
         assert transport.last.path == f"/api/v1/physical-pos/payments/{PAYMENT_ID}/cancel"
@@ -436,7 +470,9 @@ class TestReads:
     def test_list_payments_maps_filters_and_reads_page_info(self, client_factory):
         page_info = {"hasMore": True, "nextCursor": "c1", "totalCount": None}
         transport, client = client_factory(
-            json_response(envelope({"items": [payment()], "pageInfo": page_info}, pageInfo=page_info))
+            json_response(
+                envelope({"items": [payment()], "pageInfo": page_info}, pageInfo=page_info)
+            )
         )
         page = client.physical_pos().list_payments(
             limit=10, device_id=DEVICE_ID, merchant_reference="ORD-1", payment_status=None
@@ -450,7 +486,16 @@ class TestReads:
         assert page.has_more is True and page.next_cursor == "c1"
         assert page.items[0]["paymentId"] == PAYMENT_ID
 
-    @pytest.mark.parametrize("filters", [{"limit": 0}, {"limit": 101}, {"limit": "10"}, {"environment": "LIVE"}, {"organization_id": "x"}])
+    @pytest.mark.parametrize(
+        "filters",
+        [
+            {"limit": 0},
+            {"limit": 101},
+            {"limit": "10"},
+            {"environment": "LIVE"},
+            {"organization_id": "x"},
+        ],
+    )
     def test_bad_filters_are_refused(self, client_factory, filters):
         transport, client = client_factory()
         with pytest.raises(ConfigurationError):
@@ -462,7 +507,9 @@ class TestReads:
         last = {"hasMore": False, "nextCursor": None, "totalCount": None}
         transport, client = client_factory(
             json_response(envelope({"items": [payment()], "pageInfo": first}, pageInfo=first)),
-            json_response(envelope({"items": [payment(paymentId=CHILD_ID)], "pageInfo": last}, pageInfo=last)),
+            json_response(
+                envelope({"items": [payment(paymentId=CHILD_ID)], "pageInfo": last}, pageInfo=last)
+            ),
         )
         ids = [row["paymentId"] for row in client.physical_pos().iterate_payments(limit=1)]
         assert ids == [PAYMENT_ID, CHILD_ID]
@@ -482,20 +529,43 @@ class TestReads:
         transport, client = client_factory(
             json_response(envelope({"items": [tree], "pageInfo": info}, pageInfo=info)),
             json_response(envelope({"transaction": detail})),
-            json_response(envelope({"items": [payment(paymentStatus="UNKNOWN")], "pageInfo": info}, pageInfo=info)),
+            json_response(
+                envelope(
+                    {"items": [payment(paymentStatus="UNKNOWN")], "pageInfo": info}, pageInfo=info
+                )
+            ),
         )
         pos = client.physical_pos()
         page = pos.list_transactions(amount_from_minor="100", origin="DEVICE_DIRECT", store_id="s1")
-        assert query_of(transport.last) == {"amountFromMinor": "100", "origin": "DEVICE_DIRECT", "storeId": "s1"}
+        assert query_of(transport.last) == {
+            "amountFromMinor": "100",
+            "origin": "DEVICE_DIRECT",
+            "storeId": "s1",
+        }
         assert page.items[0]["itemSummary"]["lineCount"] == 2
         assert pos.get_transaction(CHILD_ID)["requestedPaymentId"] == PAYMENT_ID
         assert transport.last.path == f"/api/v1/physical-pos/transactions/{CHILD_ID}"
         pos.list_ambiguous_payments(payment_status="UNKNOWN")
-        assert transport.last.path == "/api/v1/physical-pos/transactions/ambiguous?paymentStatus=UNKNOWN"
+        assert (
+            transport.last.path
+            == "/api/v1/physical-pos/transactions/ambiguous?paymentStatus=UNKNOWN"
+        )
 
     def test_reports_and_settlements(self, client_factory):
-        sales = {"environment": "LIVE", "dateFrom": "2026-10-24", "dateTo": "2026-10-30", "groupBy": "DAY", "rows": []}
-        tax = {"environment": "LIVE", "dateFrom": "2026-10-24", "dateTo": "2026-10-30", "rows": [], "amountTotals": []}
+        sales = {
+            "environment": "LIVE",
+            "dateFrom": "2026-10-24",
+            "dateTo": "2026-10-30",
+            "groupBy": "DAY",
+            "rows": [],
+        }
+        tax = {
+            "environment": "LIVE",
+            "dateFrom": "2026-10-24",
+            "dateTo": "2026-10-30",
+            "rows": [],
+            "amountTotals": [],
+        }
         info = {"hasMore": False, "nextCursor": None, "totalCount": None}
         transport, client = client_factory(
             json_response(envelope(sales)),
@@ -521,15 +591,35 @@ class TestReads:
         _, client = client_factory()
         assert not hasattr(client.physical_pos(), "resolve_payment")
 
-@pytest.mark.parametrize("invalid", [4500, None, True, "", "01", "1e3", "1.0", " 1", "1\n", "0", "-1", "9223372036854775808"])
-def test_physical_pos_money_rejects_before_http_including_nested_and_filters(client_factory, invalid):
+
+@pytest.mark.parametrize(
+    "invalid",
+    [4500, None, True, "", "01", "1e3", "1.0", " 1", "1\n", "0", "-1", "9223372036854775808"],
+)
+def test_physical_pos_money_rejects_before_http_including_nested_and_filters(
+    client_factory, invalid
+):
     transport, client = client_factory()
     pos = client.physical_pos()
     requests = [
         lambda: pos.create_payment(dict(SALE, amountMinor=invalid), idempotency_key=KEY),
-        lambda: pos.create_payment(dict(SALE, items=[dict(SALE['items'][0], unitPriceMinor=invalid)]), idempotency_key=KEY),
-        lambda: pos.create_reversal(PAYMENT_ID, {"operation": "REFUND", "currency": "TRY", "amountMinor": invalid}, idempotency_key=KEY),
-        lambda: pos.create_reversal(PAYMENT_ID, {"operation": "REFUND", "currency": "TRY", "items": [{"lineNo": 1, "quantityMilli": 1000, "amountMinor": invalid}]}, idempotency_key=KEY),
+        lambda: pos.create_payment(
+            dict(SALE, items=[dict(SALE["items"][0], unitPriceMinor=invalid)]), idempotency_key=KEY
+        ),
+        lambda: pos.create_reversal(
+            PAYMENT_ID,
+            {"operation": "REFUND", "currency": "TRY", "amountMinor": invalid},
+            idempotency_key=KEY,
+        ),
+        lambda: pos.create_reversal(
+            PAYMENT_ID,
+            {
+                "operation": "REFUND",
+                "currency": "TRY",
+                "items": [{"lineNo": 1, "quantityMilli": 1000, "amountMinor": invalid}],
+            },
+            idempotency_key=KEY,
+        ),
         lambda: pos.list_transactions(amount_from_minor=invalid),
     ]
     for call in requests:
@@ -541,9 +631,23 @@ def test_physical_pos_money_rejects_before_http_including_nested_and_filters(cli
 def test_physical_pos_large_money_keeps_exact_string_and_numeric_quantity(client_factory):
     exact = "9007199254740993"
     transport, client = client_factory(write_answer(amountMinor=exact))
-    request = {"operation": "SALE", "target": {"deviceId": DEVICE_ID}, "amountMinor": exact, "currency": "KWD", "items": [
-        {"lineNo": 1, "name": "Exact", "quantityMilli": 1000, "unitCode": "C62", "unitPriceMinor": exact, "taxGroupCode": "KDV0", "lineTotalMinor": exact}
-    ]}
+    request = {
+        "operation": "SALE",
+        "target": {"deviceId": DEVICE_ID},
+        "amountMinor": exact,
+        "currency": "KWD",
+        "items": [
+            {
+                "lineNo": 1,
+                "name": "Exact",
+                "quantityMilli": 1000,
+                "unitCode": "C62",
+                "unitPriceMinor": exact,
+                "taxGroupCode": "KDV0",
+                "lineTotalMinor": exact,
+            }
+        ],
+    }
     result = client.physical_pos().create_payment(request, idempotency_key=KEY)
     assert result.payment["amountMinor"] == exact
     assert json.loads(transport.last.body)["items"][0]["unitPriceMinor"] == exact

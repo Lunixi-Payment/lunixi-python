@@ -76,14 +76,18 @@ class PaymentGateway:
                 action = parts[5]
                 if not self.defer:
                     if action == "capture":
-                        payment["details"]["capturedAmount"] = str(int(payment["details"]["capturedAmount"]) + int(value["amount"]))
+                        payment["details"]["capturedAmount"] = str(
+                            int(payment["details"]["capturedAmount"]) + int(value["amount"])
+                        )
                         payment["data"]["status"] = (
                             "CAPTURED"
                             if payment["details"]["capturedAmount"] == payment["data"]["amount"]
                             else "PARTIALLY_CAPTURED"
                         )
                     if action == "refund":
-                        payment["details"]["refundedAmount"] = str(int(payment["details"]["refundedAmount"]) + int(value["amount"]))
+                        payment["details"]["refundedAmount"] = str(
+                            int(payment["details"]["refundedAmount"]) + int(value["amount"])
+                        )
                         payment["data"]["status"] = (
                             "REFUNDED"
                             if payment["details"]["refundedAmount"]

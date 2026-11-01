@@ -1,10 +1,63 @@
 """Strict declared physical POS monetary fields; counters and metadata stay untouched."""
+
 from typing import Any, Mapping
+
 from ..validation import amount_minor
 
-_FIELDS = frozenset(['amountFromMinor', 'amountMinor', 'amountToMinor', 'approvedAmountMinor', 'baseMinor', 'capturedMinor', 'lineTotalMinor', 'netBaseMinor', 'netMinor', 'netTaxMinor', 'refundBaseMinor', 'refundMinor', 'refundTaxMinor', 'refundedAmountMinor', 'refundedMinor', 'reservedAmountMinor', 'reservedMinor', 'reversalReservedMinor', 'reversedMinor', 'saleBaseMinor', 'saleMinor', 'saleTaxMinor', 'unitAmountMinor', 'unitPriceMinor', 'voidBaseMinor', 'voidMinor', 'voidTaxMinor'])
-_CONTAINERS = frozenset(['data', 'payment', 'payments', 'items', 'refundItems', 'taxes', 'rows', 'transaction', 'transactions', 'root', 'children', 'itemSummary', 'amountTotals', 'reported', 'system', 'difference', 'totals', 'lines'])
-_NULLABLE = frozenset(['approvedAmountMinor', 'unitAmountMinor'])
+_FIELDS = frozenset(
+    [
+        "amountFromMinor",
+        "amountMinor",
+        "amountToMinor",
+        "approvedAmountMinor",
+        "baseMinor",
+        "capturedMinor",
+        "lineTotalMinor",
+        "netBaseMinor",
+        "netMinor",
+        "netTaxMinor",
+        "refundBaseMinor",
+        "refundMinor",
+        "refundTaxMinor",
+        "refundedAmountMinor",
+        "refundedMinor",
+        "reservedAmountMinor",
+        "reservedMinor",
+        "reversalReservedMinor",
+        "reversedMinor",
+        "saleBaseMinor",
+        "saleMinor",
+        "saleTaxMinor",
+        "unitAmountMinor",
+        "unitPriceMinor",
+        "voidBaseMinor",
+        "voidMinor",
+        "voidTaxMinor",
+    ]
+)
+_CONTAINERS = frozenset(
+    [
+        "data",
+        "payment",
+        "payments",
+        "items",
+        "refundItems",
+        "taxes",
+        "rows",
+        "transaction",
+        "transactions",
+        "root",
+        "children",
+        "itemSummary",
+        "amountTotals",
+        "reported",
+        "system",
+        "difference",
+        "totals",
+        "lines",
+    ]
+)
+_NULLABLE = frozenset(["approvedAmountMinor", "unitAmountMinor"])
 
 
 def validate_response_money(value: Any, difference: bool = False) -> None:
