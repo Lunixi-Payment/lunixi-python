@@ -33,7 +33,7 @@ Version **1.0.2** adds typed payment APIs and durable checkout orchestration whi
 pip install lunixi-sdk==1.0.2
 ```
 
-Use this command after 1.0.2 is available on PyPI. The 0.x packages use the previous money contract.
+Version 1.0.2 is published on PyPI. The 0.x packages use the previous money contract.
 
 From a source checkout, `pip install -e .` installs the SDK; `pip install -e '.[frameworks]'` installs optional runtime dependencies. Framework apps and full native tests need Python 3.12+ and the source checkout. They are runnable examples, not separately registered framework packages.
 

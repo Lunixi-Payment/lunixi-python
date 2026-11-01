@@ -2,7 +2,7 @@
 
 Read [server setup and invariants](FRAMEWORKS.md) first. This is a runnable source application with real native framework tests, not a separately registered plugin. Configure `LUNIXI_PUBLIC_ORIGIN` for the HTTPS origin/port used below and use a trusted certificate. The TLS paths are operator-provided examples; no certificate/private key is committed.
 
-Install `lunixi-sdk==1.0.2` after it is available on PyPI. For the runnable framework applications and locked environment, use the matching [v1.0.2 source tag](https://github.com/Lunixi-Payment/lunixi-python/tree/v1.0.2). Framework applications are not separate packages and are not included in the SDK wheel. Follow the [money-string migration](../MIGRATION-1.0.md).
+Install the published `lunixi-sdk==1.0.2` from PyPI. For the runnable framework applications and locked environment, use the matching [v1.0.2 source tag](https://github.com/Lunixi-Payment/lunixi-python/tree/v1.0.2). Framework applications are not separate packages and are not included in the SDK wheel. Follow the [money-string migration](../MIGRATION-1.0.md).
 
 ```sh
 python -m integrations.django_app.manage migrate

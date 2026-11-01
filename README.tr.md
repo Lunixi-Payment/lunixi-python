@@ -8,7 +8,7 @@
 
 ## Kurulum ve ödeme
 
-1.0.2 PyPI üzerinde kullanılabilir olduğunda aşağıdaki komutla tam sürümü kurun. 0.x paketleri önceki para sözleşmesini kullanır:
+PyPI üzerinde yayımlanan 1.0.2 sürümünü aşağıdaki komutla kurun. 0.x paketleri önceki para sözleşmesini kullanır:
 
 ```sh
 pip install lunixi-sdk==1.0.2
