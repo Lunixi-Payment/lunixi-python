@@ -395,7 +395,9 @@ def _written_payment(response: Any) -> Optional[Dict[str, Any]]:
         return None
     try:
         validate_response_money(response)
-    except ConfigurationError:
+    except (ConfigurationError, RecursionError):
+        # Decoders can accept nesting deeper than Python validation can walk.
+        # This response arrived after dispatch, so it cannot prove a payment outcome.
         return None
     payload = data_of(response)
     if not isinstance(payload, Mapping):

@@ -112,6 +112,28 @@ def test_a_deeply_nested_2xx_body_is_an_unknown_outcome(client_factory):
     assert caught.value.idempotency_key == KEY
 
 
+@pytest.mark.parametrize("with_payment", [False, True])
+def test_decoded_nesting_failure_preserves_unknown_outcome_and_operation_key(
+    client_factory, with_payment
+):
+    # Exercise validation independently of each interpreter's JSON decoder limit.
+    nested = []
+    for _ in range(1500):
+        nested = [nested]
+    decoded = {"data": {"payment": payment(), "children": nested} if with_payment else nested}
+
+    class DeepDecodedResponse(HttpResponse):
+        def json(self):
+            return decoded
+
+    response = DeepDecodedResponse(202, {"content-type": "application/json"}, b"{}")
+    transport, client = client_factory(response, max_retries=0)
+    with pytest.raises(PhysicalPosOutcomeUnknownError) as caught:
+        client.physical_pos().create_payment(SALE, idempotency_key=KEY)
+    assert caught.value.idempotency_key == KEY
+    assert sent_keys(transport) == [KEY]
+
+
 def test_a_dropped_connection_while_reading_is_an_unknown_outcome(client_factory):
     _, client = client_factory(transport_failure("body read timed out"), max_retries=0)
     with pytest.raises(PhysicalPosOutcomeUnknownError) as caught:

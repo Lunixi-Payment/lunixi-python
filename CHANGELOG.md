@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 — 2026-11-01
+
+- Preserve an unknown physical POS payment outcome and its original operation key when deeply nested post-send responses exceed recursive validation limits.
+- Add parser-independent decoded-response regressions; retain the existing deeply nested wire-response case and strict numeric-money rejection.
+- Require successful CI for the exact tagged commit before a PyPI publication; use concise diagnostic tracebacks without suppressing failures.
+
 ## 1.0.1 — 2026-11-01
 
 - Remove unused imports, normalize import ordering and format the money/Physical POS changes for release CI without changing strict numeric/null rejection.

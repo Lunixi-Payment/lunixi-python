@@ -13,7 +13,7 @@ on:
       tag:
         description: Release tag to publish (vX.Y.Z); select that same tag above
         required: true
-        default: v1.0.0
+        default: v1.0.2
         type: string
 
 permissions:
@@ -28,13 +28,16 @@ jobs:
     name: Build distribution
     if: github.repository == 'Lunixi-Payment/lunixi-python'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       source_sha: ${{ steps.source.outputs.source_sha }}
       tag: ${{ steps.source.outputs.tag }}
       version: ${{ steps.source.outputs.version }}
       receipt_sha256: ${{ steps.receipt.outputs.sha256 }}
     steps:
-      - name: Require the invocation and public tag to identify the same source
+      - name: Require the exact public source and successful push CI
         id: source
         env:
           TAG: ${{ inputs.tag || github.event.release.tag_name }}
@@ -42,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, os, re, urllib.request
+          import json, os, re, urllib.parse, urllib.request
           tag = os.environ['TAG']
           assert re.fullmatch(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', tag), 'Invalid numeric release tag'
           assert os.environ['GITHUB_REPOSITORY'] == 'Lunixi-Payment/lunixi-python'
@@ -66,9 +69,15 @@ jobs:
               assert obj['type'] == 'tag'
               obj = api('git/tags/' + obj['sha'])['object']
           assert obj['type'] == 'commit' and obj['sha'] == os.environ['GITHUB_SHA'], 'Tag moved or invocation source differs'
+          sha = obj['sha']
+          runs = api('actions/workflows/ci.yml/runs?' + urllib.parse.urlencode({'head_sha': sha, 'event': 'push', 'per_page': 100}))
+          assert any(run.get('head_sha') == sha and run.get('event') == 'push'
+                     and run.get('status') == 'completed' and run.get('conclusion') == 'success'
+                     and (run.get('head_repository') or {}).get('full_name') == 'Lunixi-Payment/lunixi-python'
+                     for run in runs['workflow_runs']), 'Successful push CI required for the exact release commit'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('source_sha=' + obj['sha'] + '\ntag=' + tag + '\nversion=' + tag[1:] + '\n')
-          print('Exact release invocation and immutable public source verified.')
+          print('Exact release invocation, immutable public source and successful push CI verified.')
           PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

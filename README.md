@@ -9,13 +9,13 @@
 
 # Lunixi Python SDK
 
-**Version 1.0.1 uses canonical minor-unit strings for money.** This is a breaking change from 0.x; update request and response handling together. See [migration](MIGRATION-1.0.md).
+**Version 1.0.2 uses canonical minor-unit strings for money.** This is a breaking change from 0.x; update request and response handling together. See [migration](MIGRATION-1.0.md).
 
 [![CI](https://github.com/Lunixi-Payment/lunixi-python/actions/workflows/ci.yml/badge.svg)](https://github.com/Lunixi-Payment/lunixi-python/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/lunixi-sdk)](https://pypi.org/project/lunixi-sdk/) [![Python](https://img.shields.io/pypi/pyversions/lunixi-sdk)](https://pypi.org/project/lunixi-sdk/) [![Downloads](https://img.shields.io/pypi/dm/lunixi-sdk)](https://pypi.org/project/lunixi-sdk/) [![Typed](https://img.shields.io/badge/typing-typed-blue)](https://peps.python.org/pep-0561/) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Docs](https://img.shields.io/badge/docs-docs.lunixi.com-FF6B35)](https://docs.lunixi.com/sdks/python)
 
 **[Documentation](https://docs.lunixi.com/sdks/python) · [Changelog](https://github.com/Lunixi-Payment/lunixi-python/blob/main/CHANGELOG.md) · [Issues](https://github.com/Lunixi-Payment/lunixi-python/issues) · [Security](https://github.com/Lunixi-Payment/lunixi-python/blob/main/SECURITY.md)**
 
-Version **1.0.1** adds typed payment APIs and durable checkout orchestration while preserving the existing fraud decision/event API. The SDK is synchronous, thread-safe per client, and ships `py.typed`.
+Version **1.0.2** adds typed payment APIs and durable checkout orchestration while preserving the existing fraud decision/event API. The SDK is synchronous, thread-safe per client, and ships `py.typed`.
 
 [Turkish](README.tr.md) · [Framework examples](docs/FRAMEWORKS.md) · [Django](docs/DJANGO.md) · [FastAPI](docs/FASTAPI.md) · [Flask](docs/FLASK.md)
 
@@ -30,10 +30,10 @@ Version **1.0.1** adds typed payment APIs and durable checkout orchestration whi
 ## Install
 
 ```sh
-pip install lunixi-sdk==1.0.1
+pip install lunixi-sdk==1.0.2
 ```
 
-Use this command after 1.0.1 is available on PyPI. The 0.x packages use the previous money contract.
+Use this command after 1.0.2 is available on PyPI. The 0.x packages use the previous money contract.
 
 From a source checkout, `pip install -e .` installs the SDK; `pip install -e '.[frameworks]'` installs optional runtime dependencies. Framework apps and full native tests need Python 3.12+ and the source checkout. They are runnable examples, not separately registered framework packages.
 
