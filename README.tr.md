@@ -2,22 +2,22 @@
 
 # Lunixi Python SDK
 
-**0.2.1**, mevcut fraud API'sini koruyarak ödeme API'leri ve kalıcı checkout akışı ekler. SDK senkron çalışır, istemci başına thread güvenlidir ve `py.typed` içerir. Python 3.9+; gerçek Django 6.1.2, FastAPI 0.162.0, Flask 3.1.3 örnekleri/testleri Python 3.12+ gerektirir. Kriptografi `cryptography`, JavaScript sayı yazımı `rfc8785`, HTTP/SQLite standart kütüphane üzerinden sağlanır.
+**1.0.0**, mevcut fraud ve kalıcı checkout akışlarını koruyarak para alanlarını kanonik küçük birim string sözleşmesine geçirir. [Geçiş rehberini](MIGRATION-1.0.md) uygulayın. SDK senkron çalışır, istemci başına thread güvenlidir ve `py.typed` içerir. Python 3.9+; gerçek Django 6.1.2, FastAPI 0.162.0, Flask 3.1.3 örnekleri/testleri Python 3.12+ gerektirir. Kriptografi `cryptography`, JavaScript sayı yazımı `rfc8785`, HTTP/SQLite standart kütüphane üzerinden sağlanır.
 
 [English](README.md) · [Framework rehberi](docs/FRAMEWORKS.tr.md) · [Django](docs/DJANGO.tr.md) · [FastAPI](docs/FASTAPI.tr.md) · [Flask](docs/FLASK.tr.md)
 
 ## Kurulum ve ödeme
 
-**[0.2.1 PyPI’da yayımlandı](https://pypi.org/project/lunixi-sdk/0.2.1/)** ve güncel form/URL sözleşmesini içerir. Herkese açık wheel ve sdist dosyalarının boyutları, SHA256 değerleri ve paket kimlikleri registry kaydıyla doğrulandı. Tam sürümü kurun:
+1.0.0 PyPI üzerinde kullanılabilir olduğunda aşağıdaki komutla tam sürümü kurun. 0.x paketleri önceki para sözleşmesini kullanır:
 
 ```sh
-pip install lunixi-sdk==0.2.1
+pip install lunixi-sdk==1.0.0
 ```
 
 Alternatif olarak aynı kaynak etiketini GitHub’dan kurabilirsiniz:
 
 ```sh
-pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.1"
+pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v1.0.0"
 ```
 
 ```python
@@ -30,7 +30,7 @@ client = LunixiClient(
     max_retries=0,
 )
 intent = client.payments().create_intent(
-    CreateIntent(1990, "TRY", "kalici-siparis-123",
+    CreateIntent("1990", "TRY", "kalici-siparis-123",
                  callback_url="https://magaza.example/return/123"),
     idempotency_key=veritabaninda_saklanan_deneme_anahtari,
 )
@@ -39,7 +39,7 @@ form_config = intent.browser_config()
 yonlendirme = intent.hosted_url
 ```
 
-Tutarlar tam sayı küçük birimdir; float, bool, sıfır ve eski üst düzey tutar alanları ağdan önce reddedilir. `minor_units('19.90','TRY')` tam ondalık dönüşüm yapar; JPY 0, KWD 3, desteklenen diğer para birimleri2 basamaklıdır. `preauth=True` yalnız ön provizyon açar; sipariş ödenmiş sayılmaz. Taksit, uygun yemek kartı/alışveriş kredisi, sigorta ve çoklu kart Lunixi panel/form ayarlarıyla yönetilir. Örnekler kart numarası/CVV toplamaz.
+Tutarlar kanonik küçük birim string değerleridir (`"1990"` = 19,90 TRY); sayısal JSON, float, bool, sıfır ve eski üst düzey tutar alanları ağdan önce reddedilir. `minor_units('19.90','TRY')` ondalık metni para biriminin basamak sayısıyla tam olarak dönüştürür; JPY 0, TRY 2, KWD 3 basamak kullanır. Fiat tutar üst sınırı `"9223372036854775807"` değeridir; sağlayıcı sınırı daha düşük olabilir. `preauth=True` yalnız ön provizyon açar; sipariş ödenmiş sayılmaz. Taksit, uygun yemek kartı/alışveriş kredisi, sigorta ve çoklu kart Lunixi panel/form ayarlarıyla yönetilir. Örnekler kart numarası/CVV toplamaz.
 
 `payments()` yardımcıları: `create_intent`, `get`, `list`, `capture`, `refund`, `void`, `methods`, `get_split`, `list_splits`, `refund_split`. Finansal işlemler kalıcı `idempotency_key` ister. Intent dışındaki yanıtlar tüm gateway zarfını korur; `details`, `pageInfo`, request ID kaybolmaz. API'de intent yanıtı `paymentId`/`token`, ödeme sorgusu `data.id`, webhook `data.intentId` kullanır. Yalnız HTTP 2xx finansal kesinlik değildir.
 
@@ -83,4 +83,4 @@ Framework örneklerinde varsayılan `LUNIXI_CHECKOUT_MODE=embedded` değeridir. 
 
 İki mod aynı formu kullanır; açık yöntemler, çoklu kart, taksit ve sigorta yönlendirme gerektirmez. Token ve sayfa adresi ayrı authenticated bağlamlarla şifrelenir. Kayıtlı dönüş adresi/mod/gövde/hash/anahtar değişmez; ayar değişikliği yeni tahsilat başlatamaz. Eski yönlendirmeli denemede backend adresi yoksa mutabakat gerekir. Ham webhook, sahiplik/oturum/CSRF, doğrulanmış tahsilat ve bilgilendirici 3DS/çoklu kart dönüşleri korunur.
 
-0.2.1 kaynak sürümü için 27 odaklı SDK/native Django/FastAPI/Flask kontrolü geçti; önceki tam 0.2.0 doğrulaması temel kanıt olarak korunur. Canlı tahsilat veya yeni geniş merchant kabulü yapılmadı.
+Geçmiş 0.2.1 kaynak sürümü için 27 odaklı SDK/native Django/FastAPI/Flask kontrolü geçti; önceki tam 0.2.0 doğrulaması temel kanıt olarak korunur. Canlı tahsilat veya yeni geniş merchant kabulü yapılmadı.

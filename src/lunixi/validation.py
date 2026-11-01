@@ -31,15 +31,48 @@ CURRENCIES = frozenset(
 )
 
 
-def amount_minor(value: Any, *, positive: bool = True) -> int:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int)
-        or value < (1 if positive else 0)
-        or value > SAFE_INTEGER
-    ):
-        raise ConfigurationError("Amount must be an integer in the safe minor-unit range.")
+MAX_FIAT_MINOR = 9223372036854775807
+
+
+def amount_minor(value: Any, *, positive: bool = True, signed: bool = False) -> str:
+    pattern = r"0|-?[1-9][0-9]*" if signed else r"[1-9][0-9]*" if positive else r"0|[1-9][0-9]*"
+    if not isinstance(value, str) or not re.fullmatch(pattern, value):
+        raise ConfigurationError("Amount must be a canonical minor-unit string.")
+    if not -MAX_FIAT_MINOR - 1 <= int(value) <= MAX_FIAT_MINOR:
+        raise ConfigurationError("Amount exceeds the signed 64-bit fiat range.")
     return value
+
+
+def decimal_to_minor(value: str, currency: str) -> str:
+    """Convert exact decimal text with the actual supported currency exponent."""
+    currency_code(currency)
+    exponent = 0 if currency == "JPY" else 3 if currency == "KWD" else 2
+    if not isinstance(value, str) or not re.fullmatch(r"(?:0|[1-9][0-9]*)(?:[.][0-9]+)?", value):
+        raise ConfigurationError("Exact nonnegative decimal text is required.")
+    whole, _, fraction = value.partition(".")
+    if any(c != "0" for c in fraction[exponent:]):
+        raise ConfigurationError("Fractional minor units are not permitted.")
+    return amount_minor(str(int(whole + fraction[:exponent].ljust(exponent, "0"))), positive=False)
+
+
+def validate_money_fields(value: Any, *, response: bool = False) -> None:
+    """Validate public money DTO fields without touching merchant metadata or rates."""
+    if isinstance(value, list):
+        for entry in value:
+            validate_money_fields(entry, response=response)
+    elif isinstance(value, dict):
+        for key, entry in value.items():
+            if key in ("metadata", "fields", "inputFields", "insuranceData") or entry is None:
+                continue
+            if key in ('amount', 'amountMinor', 'authorizedAmount', 'availableBalance', 'balanceMinor', 'buyerTotalCharge', 'cancelledPremiumAmount', 'capturedAmount', 'capturedAmountMinor', 'chargeAmount', 'collectedAmountMinor', 'collectedPremiumAmount', 'compensatedAmount', 'disputedAmount', 'feeTotal', 'fixedFee', 'inForcePremiumAmount', 'insuranceValueAmount', 'legAmount', 'legsAmount', 'lineTotalMinor', 'maxAmount', 'maxAmountMinor', 'minAmount', 'minAmountMinor', 'nonRefundableAmount', 'paidAmount', 'paidPrice', 'pendingBalance', 'premiumAmount', 'price', 'refundAmount', 'refundOpenPremiumAmount', 'refundableAmount', 'refundedAmount', 'refundedAmountMinor', 'refundedPremiumAmount', 'requestedAmount', 'reservedBalance', 'sourceAmountMinor', 'targetAmountMinor', 'taxAmountMinor', 'taxTotal', 'totalAmount', 'unitPriceMinor'):
+                amount_minor(entry, positive=not response and key in ("amount", "price", "totalAmount"), signed="balance" in key.lower())
+            elif key == "suggestedAmountsMinor":
+                if not isinstance(entry, list):
+                    raise ConfigurationError("suggestedAmountsMinor must be a list.")
+                for amount in entry:
+                    amount_minor(amount)
+            elif key in ('data', 'details', 'items', 'rows', 'results', 'payments', 'operations', 'balances', 'wallets', 'legs', 'aggregate', 'refund', 'refunds', 'totals', 'charge', 'fees', 'fee', 'balance', 'splits', 'sellers', 'basketItems', 'promissoryNote', 'schedule', 'notes', 'lines', 'offers', 'policies', 'reconciliation', 'quotes', 'payment', 'transactions', 'accounts', 'settlements', 'payouts', 'limits'):
+                validate_money_fields(entry, response=response)
 
 
 def currency_code(value: str) -> str:

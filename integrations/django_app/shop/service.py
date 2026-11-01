@@ -40,7 +40,7 @@ class DjangoOrders:
 
     def start(self, key: str, user):
         order = self.owned(key, user)
-        snapshot = OrderSnapshot(self.settings.merchant_id, key, order.amount, order.currency)
+        snapshot = OrderSnapshot(self.settings.merchant_id, key, str(order.amount), order.currency)
         result = self.service.start(
             key,
             snapshot,
@@ -60,7 +60,7 @@ class DjangoOrders:
             raise CommerceError("Native order and ledger must share the Django transaction.")
         order = tx.order
         if snapshot != OrderSnapshot(
-            self.settings.merchant_id, str(order.pk), order.amount, order.currency
+            self.settings.merchant_id, str(order.pk), str(order.amount), order.currency
         ):
             raise CommerceError("Native order changed after reservation.")
         if decision.paid and not order.fulfillment_hold and not order.stock_applied:
@@ -94,7 +94,7 @@ class DjangoOrders:
                 and record is not None
                 and record["snapshot"]
                 == OrderSnapshot(
-                    self.settings.merchant_id, key, order.amount, order.currency
+                    self.settings.merchant_id, key, str(order.amount), order.currency
                 ).to_dict()
                 and order.state in ("paid", "partially_refunded")
                 and order.stock_applied

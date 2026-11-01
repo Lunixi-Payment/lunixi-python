@@ -72,6 +72,11 @@ class ApiClient:
         self._signer = signer
         self._tokens = token_manager
 
+    @property
+    def max_retries(self) -> int:
+        """The configured number of extra attempts for a retryable request."""
+        return self._config.max_retries
+
     def request(
         self,
         method: str,
@@ -81,6 +86,7 @@ class ApiClient:
         query: Optional[Mapping[str, Any]] = None,
         step_up: bool = False,
         idempotency_key: Optional[str] = None,
+        max_retries: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Sends one request and returns the decoded response envelope.
 
@@ -96,6 +102,9 @@ class ApiClient:
             step_up: Adds the per-request Ed25519 signature.
             idempotency_key: Value for the ``Idempotency-Key`` header. Supplying
                 one also makes the request eligible for automatic retry.
+            max_retries: Extra attempts for this request only; ``None`` (the
+                default) uses the configured value. ``0`` sends exactly once,
+                for a caller that runs its own attempt loop.
 
         Raises:
             ValidationError: on 400.
@@ -151,10 +160,21 @@ class ApiClient:
 
             if not isinstance(body, Mapping):
                 raise ConfigurationError("Financial mutation requires an integer amount body.")
-            amount_minor(body.get("amount"))
+            if "amount" in body or financial.endswith(("/intents", "/direct/payment")):
+                amount_minor(body.get("amount"))
+        if max_retries is not None and (
+            isinstance(max_retries, bool) or not isinstance(max_retries, int) or not 0 <= max_retries <= 5
+        ):
+            raise ConfigurationError("max_retries must be an integer from 0 to 5.")
+        retry_limit = self._config.max_retries if max_retries is None else max_retries
         upper_method = method.upper()
         signed_path = build_path(path, query)
         url = self._config.url_for(signed_path)
+        from .validation import validate_money_fields
+        fiat_route = any(path == base or path.startswith(base + "/") for base in ("/api/v1/payments", "/api/v1/wallet", "/api/v1/insurance", "/api/v1/bank-connect", "/api/v1/fraud"))
+        if fiat_route:
+            validate_money_fields(body)
+            validate_money_fields(query)
         raw_body = serialize_body(body)
 
         # 🔴 A write is retried ONLY with an idempotency key. Replaying an
@@ -175,7 +195,7 @@ class ApiClient:
                     upper_method, url, headers, raw_body, self._config.timeout_seconds
                 )
             except TransportError:
-                if retryable and attempt <= self._config.max_retries:
+                if retryable and attempt <= retry_limit:
                     _backoff(attempt)
                     continue
                 raise ApiError("Gateway request failed without a confirmed response.") from None
@@ -183,7 +203,10 @@ class ApiClient:
             if len(response.body) > self._config.max_response_bytes:
                 raise ApiError("Gateway response exceeds the configured limit.")
             if response.ok:
-                return response.json()
+                result = response.json()
+                if fiat_route:
+                    validate_money_fields(result, response=True)
+                return result
 
             # One refresh-and-retry for an expired token. Bounded by the flag:
             # a second 401 is the account's answer, not a stale cache.
@@ -192,7 +215,7 @@ class ApiClient:
                 reauthenticated = True
                 continue
 
-            if response.status_code >= 500 and retryable and attempt <= self._config.max_retries:
+            if response.status_code >= 500 and retryable and attempt <= retry_limit:
                 _backoff(attempt)
                 continue
 
@@ -252,6 +275,7 @@ def _to_api_error(response: Any) -> ApiError:
         "code": code if isinstance(code, str) and code != "" else None,
         "response": None,
         "request_id": response.header("x-request-id"),
+        "details": _safe_details(body.get("details")),
     }
 
     if response.status_code == 400:
@@ -265,6 +289,24 @@ def _to_api_error(response: Any) -> ApiError:
             return RateLimitError(message, **kwargs)
         return ServiceUnavailableError(message, **kwargs)
     return ApiError(message, **kwargs)
+
+
+#: ``details`` keys kept on an error: machine-readable, never a submitted value.
+_DETAIL_KEYS = ("field", "reason", "retryable", "retryAfterSeconds", "allowedOperation")
+
+
+def _safe_details(details: Any) -> Optional[Dict[str, Any]]:
+    """The scalar, value-free part of an error's ``details`` (field path, reason, retry hints)."""
+    if not isinstance(details, Mapping):
+        return None
+    kept: Dict[str, Any] = {}
+    for key in _DETAIL_KEYS:
+        value = details.get(key)
+        if isinstance(value, bool) or (isinstance(value, int) and 0 <= value <= 86400 * 31):
+            kept[key] = value
+        elif isinstance(value, str) and 0 < len(value) <= 200 and value.isprintable():
+            kept[key] = value
+    return kept or None
 
 
 def _backoff(attempt: int) -> None:

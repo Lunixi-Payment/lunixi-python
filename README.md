@@ -9,11 +9,13 @@
 
 # Lunixi Python SDK
 
+**Version 1.0.0 uses canonical minor-unit strings for money.** This is a breaking change from 0.x; update request and response handling together. See [migration](MIGRATION-1.0.md).
+
 [![CI](https://github.com/Lunixi-Payment/lunixi-python/actions/workflows/ci.yml/badge.svg)](https://github.com/Lunixi-Payment/lunixi-python/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/lunixi-sdk)](https://pypi.org/project/lunixi-sdk/) [![Python](https://img.shields.io/pypi/pyversions/lunixi-sdk)](https://pypi.org/project/lunixi-sdk/) [![Downloads](https://img.shields.io/pypi/dm/lunixi-sdk)](https://pypi.org/project/lunixi-sdk/) [![Typed](https://img.shields.io/badge/typing-typed-blue)](https://peps.python.org/pep-0561/) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Docs](https://img.shields.io/badge/docs-docs.lunixi.com-FF6B35)](https://docs.lunixi.com/sdks/python)
 
 **[Documentation](https://docs.lunixi.com/sdks/python) · [Changelog](https://github.com/Lunixi-Payment/lunixi-python/blob/main/CHANGELOG.md) · [Issues](https://github.com/Lunixi-Payment/lunixi-python/issues) · [Security](https://github.com/Lunixi-Payment/lunixi-python/blob/main/SECURITY.md)**
 
-Version **0.2.1** adds typed payment APIs and durable checkout orchestration while preserving the existing fraud decision/event API. The SDK is synchronous, thread-safe per client, and ships `py.typed`.
+Version **1.0.0** adds typed payment APIs and durable checkout orchestration while preserving the existing fraud decision/event API. The SDK is synchronous, thread-safe per client, and ships `py.typed`.
 
 [Turkish](README.tr.md) · [Framework examples](docs/FRAMEWORKS.md) · [Django](docs/DJANGO.md) · [FastAPI](docs/FASTAPI.md) · [Flask](docs/FLASK.md)
 
@@ -25,19 +27,13 @@ Version **0.2.1** adds typed payment APIs and durable checkout orchestration whi
 | Payment form | Official Lunixi browser bundle or hosted `pay.lunixi.com` |
 | Durable example storage | SQLite on disk; Django's native ORM with IMMEDIATE transactions |
 
-## Installation
-
-**[0.2.1 is published on PyPI](https://pypi.org/project/lunixi-sdk/0.2.1/)** with the updated form/URL contract. Its public wheel and sdist sizes, SHA256 digests and package metadata have been verified against the registry. Install this exact version:
+## Install
 
 ```sh
-pip install lunixi-sdk==0.2.1
+pip install lunixi-sdk==1.0.0
 ```
 
-Alternatively, install the same source tag from GitHub:
-
-```sh
-pip install "lunixi-sdk @ git+https://github.com/Lunixi-Payment/lunixi-python.git@v0.2.1"
-```
+Use this command after 1.0.0 is available on PyPI. The 0.x packages use the previous money contract.
 
 From a source checkout, `pip install -e .` installs the SDK; `pip install -e '.[frameworks]'` installs optional runtime dependencies. Framework apps and full native tests need Python 3.12+ and the source checkout. They are runnable examples, not separately registered framework packages.
 
@@ -54,7 +50,7 @@ client = LunixiClient(
     max_retries=0,
 )
 intent = client.payments().create_intent(
-    CreateIntent(1990, "TRY", "persisted-order-123",
+    CreateIntent("1990", "TRY", "persisted-order-123",
                  callback_url="https://shop.example/return/123"),
     idempotency_key=persisted_attempt_key,
 )
@@ -64,7 +60,7 @@ public_form_configuration = intent.browser_config()
 hosted_url = intent.hosted_url
 ```
 
-Money is integer minor units, from 1 to 9,007,199,254,740,991; booleans, floats, zero and removed root amount fields fail before token exchange/network. `minor_units('19.90','TRY')` converts a plain decimal string exactly; JPY has0 decimals and KWD 3. Preauthorization is a JSON boolean; an authorization is on hold, not paid. Available methods, installments, eligible shopping credit/meal cards, insurance and multi-card options belong to the Lunixi form/panel. The examples never collect card numbers/CVV.
+Money is canonical minor-unit strings, from 1 to 9,223,372,036,854,775,807; booleans, floats, zero and removed root amount fields fail before token exchange/network. `minor_units('19.90','TRY')` converts a plain decimal string exactly; JPY has0 decimals and KWD 3. Preauthorization is a JSON boolean; an authorization is on hold, not paid. Available methods, installments, eligible shopping credit/meal cards, insurance and multi-card options belong to the Lunixi form/panel. The examples never collect card numbers/CVV.
 
 | Helper | Merchant API |
 |---|---|
@@ -90,7 +86,7 @@ ledger = SqliteLedgerStore("/secure/state/commerce.sqlite3")
 ledger.install()  # explicit schema setup, outside request handling
 service = CheckoutService(client, ledger, SecretBox(server_encryption_key_bytes))
 session = service.start(
-    "order-123", OrderSnapshot(merchant_id, "order-123", 1990, "TRY"),
+    "order-123", OrderSnapshot(merchant_id, "order-123", "1990", "TRY"),
     "https://shop.example/return/order-123", hosted=False,
 )
 # `apply_native` validates current native totals/holds and writes using tx.connection.
@@ -116,7 +112,7 @@ from lunixi import Channel
 result = client.fraud().evaluate(
     channel=Channel.STANDALONE_API,
     transaction_ref="persisted-order-123",
-    payment={"amount":1990,"currency":"TRY"},
+    payment={"amount":"1990","currency":"TRY"},
 )
 if result.blocked:
     refuse_order()
@@ -164,4 +160,6 @@ The framework examples default to `LUNIXI_CHECKOUT_MODE=embedded`: the existing 
 
 The shared form owns enabled methods, multi-card, installments and insurance in either mode; none requires a redirect. Persisted tokens and page URLs are encrypted with distinct authenticated contexts. The original callback/mode/body/hash/key remain bound to an existing attempt: changing configuration does not create a replacement charge. An older hosted record without a backend URL requires reconciliation. Strict raw webhooks, owner/session/CSRF checks, authenticated settlement and informational 3DS/split returns remain required.
 
-Current source 0.2.1 focused checks: 27 SDK/native Django/FastAPI/Flask cases passed; prior full 0.2.0 verification remains the baseline. No live merchant charge or broad new merchant acceptance was run.
+Historical 0.2.1 focused checks: 27 SDK/native Django/FastAPI/Flask cases passed; prior full 0.2.0 verification remains the baseline. No live merchant charge or broad new merchant acceptance was run.
+
+Before upgrading from 0.x, follow [the money-string migration](MIGRATION-1.0.md).

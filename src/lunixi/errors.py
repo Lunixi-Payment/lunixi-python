@@ -26,6 +26,9 @@ __all__ = [
     "AuthenticationError",
     "RateLimitError",
     "ServiceUnavailableError",
+    "PhysicalPosCardDataRejectedError",
+    "PhysicalPosRateLimitError",
+    "PhysicalPosOutcomeUnknownError",
 ]
 
 
@@ -62,6 +65,13 @@ class ApiError(LunixiError):
         response: The decoded response body, when it was JSON.
         request_id: Correlation id from the ``X-Request-Id`` header — quote it
             in a support request.
+        details: The machine-readable part of the error's ``details`` —
+            only ``field``, ``reason``, ``retryable``,
+            ``retryAfterSeconds`` and ``allowedOperation`` when the gateway
+            sent them (a field PATH, never a value), else ``None``.
+        idempotency_key: The ``Idempotency-Key`` the failed write was sent
+            with, when the client that raised it knows it. Retry the same
+            operation with this key.
     """
 
     def __init__(
@@ -72,6 +82,8 @@ class ApiError(LunixiError):
         code: Optional[str] = None,
         response: Optional[Dict[str, Any]] = None,
         request_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
     ) -> None:
         super().__init__(message)
         self.message = message
@@ -79,6 +91,8 @@ class ApiError(LunixiError):
         self.code = code
         self.response = response
         self.request_id = request_id
+        self.details = details
+        self.idempotency_key = idempotency_key
 
     def __str__(self) -> str:  # pragma: no cover - formatting only
         parts = [self.message]
@@ -150,3 +164,76 @@ class ServiceUnavailableError(ApiError):
         super().__init__(message, **kwargs)
         self.retry_after = retry_after
         self.quota = quota
+
+
+class PhysicalPosCardDataRejectedError(ValidationError):
+    """A physical POS request carried card data — ``physical_pos.payment.card_data_rejected``.
+
+    The API never takes a card number, security code, track, PIN or expiry:
+    the card is read on the device. Raised before sending when a request or
+    filter key looks like card data (``status_code`` 0 — nothing was sent), and
+    when the gateway answers with this code (``status_code`` 400, for example
+    a card number inside ``merchantReference``).
+
+    Attributes:
+        field: Path of the offending field (``items[1].name``, ``target.pan``);
+            the value is never repeated.
+    """
+
+    CODE = "physical_pos.payment.card_data_rejected"
+
+    def __init__(self, message: str, *, field: Optional[str] = None, **kwargs: Any) -> None:
+        kwargs.setdefault("code", self.CODE)
+        super().__init__(message, **kwargs)
+        self.field = field
+
+
+class PhysicalPosRateLimitError(RateLimitError):
+    """429 on a physical POS route (payment writes are limited per key).
+
+    ``retry_after`` is the ``Retry-After`` header, falling back to
+    ``details.retryAfterSeconds``. Wait that long; a payment write may be
+    repeated with the same ``idempotency_key``.
+    """
+
+
+class PhysicalPosVoidAfterSettlementError(ApiError):
+    """409 ``physical_pos.payment.void_after_settlement`` — the payment is in a device end-of-day.
+
+    It can no longer be voided: return the amount with a ``REFUND`` reversal
+    on the same payment (with a new idempotency key).
+
+    Attributes:
+        allowed_operation: ``details.allowedOperation`` (``"REFUND"``), or
+            ``None`` when the answer did not carry it.
+    """
+
+    CODE = "physical_pos.payment.void_after_settlement"
+
+    def __init__(self, message: str, *, allowed_operation: Optional[str] = None, **kwargs: Any) -> None:
+        kwargs.setdefault("code", self.CODE)
+        super().__init__(message, **kwargs)
+        self.allowed_operation = allowed_operation
+
+
+class PhysicalPosOutcomeUnknownError(ApiError):
+    """A payment write got no definite answer — the payment may or may not exist.
+
+    Raised by ``create_payment``, ``create_reversal`` and ``cancel_payment``
+    when any attempt of the call was uncertain: no HTTP answer (network,
+    timeout, a body that could not be read), a 2xx without a usable
+    ``payment``, or a 5xx without a "not started" code
+    (``PHYSICAL_POS_NOT_STARTED_CODES``). Once one attempt was uncertain the
+    call ends with this error whatever the last answer was — a later 429 or
+    409 included — because the payment may exist under the key. The cause is
+    the last error. Retry the SAME operation with
+    :attr:`idempotency_key` — never with a new key, which can start a second
+    payment — or find it with ``list_payments(merchant_reference=...)``.
+
+    Attributes:
+        retry_after: ``Retry-After`` seconds when the gateway sent one.
+    """
+
+    def __init__(self, message: str, *, retry_after: Optional[int] = None, **kwargs: Any) -> None:
+        super().__init__(message, **kwargs)
+        self.retry_after = retry_after

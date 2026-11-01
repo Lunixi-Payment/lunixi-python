@@ -36,6 +36,10 @@ from .errors import (
     AuthenticationError,
     ConfigurationError,
     LunixiError,
+    PhysicalPosCardDataRejectedError,
+    PhysicalPosOutcomeUnknownError,
+    PhysicalPosRateLimitError,
+    PhysicalPosVoidAfterSettlementError,
     RateLimitError,
     ServiceUnavailableError,
     SignatureError,
@@ -63,6 +67,19 @@ from .fraud.taxonomy import (
 from .http.envelope import Page, data_of, is_success, items_of, page_info_of
 from .http.transport import HttpResponse, HttpTransport, TransportError, UrllibTransport
 from .payments import CreateIntent, IntentResult, PaymentsClient
+from .physical_pos import (
+    PHYSICAL_POS_EVENT_PATTERN,
+    PHYSICAL_POS_EVENT_TYPES,
+    PhysicalPosClient,
+    PhysicalPosEvents,
+    PhysicalPosManagementClient,
+    PhysicalPosPaymentOperation,
+    PhysicalPosPaymentStatus,
+    PhysicalPosPaymentWriteResult,
+    PhysicalPosReversalStatus,
+    PhysicalPosWebhookEvent,
+    PhysicalPosWriteResult,
+)
 from .webhook.verifier import WebhookEvent, WebhookVerifier
 
 __all__ = [
@@ -70,6 +87,17 @@ __all__ = [
     "CreateIntent",
     "IntentResult",
     "PaymentsClient",
+    "PhysicalPosClient",
+    "PhysicalPosManagementClient",
+    "PhysicalPosPaymentWriteResult",
+    "PhysicalPosWriteResult",
+    "PhysicalPosWebhookEvent",
+    "PhysicalPosEvents",
+    "PHYSICAL_POS_EVENT_PATTERN",
+    "PHYSICAL_POS_EVENT_TYPES",
+    "PhysicalPosPaymentOperation",
+    "PhysicalPosPaymentStatus",
+    "PhysicalPosReversalStatus",
     "Configuration",
     "ApiClient",
     "Ed25519Signer",
@@ -115,4 +143,8 @@ __all__ = [
     "AuthenticationError",
     "RateLimitError",
     "ServiceUnavailableError",
+    "PhysicalPosCardDataRejectedError",
+    "PhysicalPosRateLimitError",
+    "PhysicalPosOutcomeUnknownError",
+    "PhysicalPosVoidAfterSettlementError",
 ]

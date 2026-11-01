@@ -18,6 +18,7 @@ sdist = root / f"dist/lunixi_sdk-{version}.tar.gz"
 with zipfile.ZipFile(wheel) as archive:
     names = archive.namelist()
     assert "lunixi/payments/__init__.py" in names
+    assert "lunixi/physical_pos/__init__.py" in names
     assert "lunixi/commerce/service.py" in names
     assert "lunixi/py.typed" in names
     assert not any(n.startswith(("tests/", "integrations/", ".venv/")) for n in names)

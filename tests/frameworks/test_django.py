@@ -30,7 +30,7 @@ def native(payment_setup, monkeypatch):
         username="other", password="synthetic-password-used-only-in-tests"
     )
     stock = Stock.objects.create(sku="sample", quantity=10)
-    order = Order.objects.create(owner=user, stock=stock, amount=1990, currency="TRY")
+    order = Order.objects.create(owner=user, stock=stock, amount="1990", currency="TRY")
     client = Client(enforce_csrf_checks=True)
     return orders, gateway, user, other, order, client
 
@@ -113,7 +113,7 @@ def test_native_browser_return_tamper_signed_replay_and_stock(native):
     assert Stock.objects.get(pk="sample").quantity == 9
     assert Event.objects.count() == 1
     assert Outbox.objects.count() == 1
-    Order.objects.filter(pk=order.pk).update(amount=2990)
+    Order.objects.filter(pk=order.pk).update(amount="2990")
     assert not orders.complete(order.pk, user)
 
 

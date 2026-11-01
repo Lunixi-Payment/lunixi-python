@@ -1,6 +1,6 @@
 # Runnable framework integrations
 
-**[SDK 0.2.1 is published on PyPI](https://pypi.org/project/lunixi-sdk/0.2.1/)** and can be installed with `pip install lunixi-sdk==0.2.1`. The runnable framework applications and their locked environment come from the matching [v0.2.1 source tag](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.1); they are not separate packages and are not included in the SDK wheel.
+Install `lunixi-sdk==1.0.0` after it is available on PyPI. For the runnable framework applications and locked environment, use the matching [v1.0.0 source tag](https://github.com/Lunixi-Payment/lunixi-python/tree/v1.0.0). Framework applications are not separate packages and are not included in the SDK wheel. Follow the [money-string migration](../MIGRATION-1.0.md).
 
 These are complete source applications around the same SDK/Commerce workflow, not separately published framework plugins. Use the pinned development lock on Python 3.12+ for the verified Django 6.1.2, FastAPI 0.162.0 and Flask 3.1.3 targets. Existing stores should adapt their own authentication/order/fulfillment models; the examples use real persisted sample orders/stock and enforce ownership.
 
@@ -9,7 +9,7 @@ These are complete source applications around the same SDK/Commerce workflow, no
 Check out the matching example source, then install its locked environment:
 
 ```sh
-git clone --branch v0.2.1 --depth 1 https://github.com/Lunixi-Payment/lunixi-python.git
+git clone --branch v1.0.0 --depth 1 https://github.com/Lunixi-Payment/lunixi-python.git
 cd lunixi-python
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements-dev.lock
@@ -73,7 +73,7 @@ The framework examples default to `LUNIXI_CHECKOUT_MODE=embedded`: the existing 
 
 The shared form owns enabled methods, multi-card, installments and insurance in either mode; none requires a redirect. Persisted tokens and page URLs are encrypted with distinct authenticated contexts. The original callback/mode/body/hash/key remain bound to an existing attempt: changing configuration does not create a replacement charge. An older hosted record without a backend URL requires reconciliation. Strict raw webhooks, owner/session/CSRF checks, authenticated settlement and informational 3DS/split returns remain required.
 
-Current source 0.2.1 focused checks: 27 SDK/native Django/FastAPI/Flask cases passed; prior full 0.2.0 verification remains the baseline. No live merchant charge or broad new merchant acceptance was run.
+Historical 0.2.1 focused checks: 27 SDK/native Django/FastAPI/Flask cases passed; prior full 0.2.0 verification remains the baseline. No live merchant charge or broad new merchant acceptance was run.
 
 The checkout page’s CSP permits form POSTs only to `'self'` and the configured gateway origin (default `https://api-gateway.lunixi.com`). This preserves wallet/provider and legacy POST handoffs supported by the browser SDK. For another reviewed provider, set server-only `LUNIXI_FORM_ACTION_ORIGINS` to a comma-separated list of exact HTTPS origins, without spaces, paths, trailing slashes, credentials, query, fragment or wildcards. Invalid configuration fails closed; gateway responses and browser fields never expand this list. Script nonces, frame/connect restrictions and informational return handling remain in force.
 

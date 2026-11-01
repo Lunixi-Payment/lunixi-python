@@ -31,7 +31,7 @@ def _event(reference: str) -> dict:
         "subjectType": "customer",
         "subjectId": "cus_88",
         "occurredAt": _now(),
-        "amount": 14990,
+        "amount": "14990",
         "currency": "TRY",
     }
 

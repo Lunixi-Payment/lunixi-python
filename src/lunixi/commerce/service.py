@@ -292,7 +292,7 @@ class CheckoutService:
         return PaymentDecision(
             record["state"],
             record["paymentId"],
-            record.get("chargedAmount", record["snapshot"]["amount"]),
+            record.get("chargedAmount", int(record["snapshot"]["amount"])),
             record.get("capturedAmount", 0),
             record.get("refundedAmount", 0),
             record.get("gatewayStatus", ""),
@@ -304,7 +304,7 @@ class CheckoutService:
         return {k: v for k, v in op.items() if k != "key"} if op else None
 
     def mutate(
-        self, key: str, operation_id: str, action: str, amount: Optional[int], apply: Apply
+        self, key: str, operation_id: str, action: str, amount: Optional[str], apply: Apply
     ) -> PaymentDecision:
         if (
             not isinstance(operation_id, str)
@@ -314,11 +314,13 @@ class CheckoutService:
         ):
             raise CommerceError("A stable operation ID and supported action are required.")
         if action != "void":
-            amount_minor(amount)
+            exact_amount: Optional[int] = int(amount_minor(amount))
+        else:
+            exact_amount = None
         record = self._load(key)
         op_id = _hash(operation_id)
         op = record.get("operations", {}).get(op_id)
-        if op is not None and (op["action"] != action or op["amount"] != amount):
+        if op is not None and (op["action"] != action or op["amount"] != exact_amount):
             raise CommerceError("Operation ID was reused with different parameters.")
         if op is None:
             evidence, _ = self._evidence(record)
@@ -327,16 +329,16 @@ class CheckoutService:
                     action == "refund"
                     and (
                         evidence.state not in ("paid", "partially_captured", "partially_refunded")
-                        or amount is None
-                        or amount > evidence.captured_amount - evidence.refunded_amount
+                        or exact_amount is None
+                        or exact_amount > evidence.captured_amount - evidence.refunded_amount
                     )
                 )
                 or (
                     action == "capture"
                     and (
                         evidence.state not in ("authorized", "partially_captured")
-                        or amount is None
-                        or amount > evidence.charged_amount - evidence.captured_amount
+                        or exact_amount is None
+                        or exact_amount > evidence.charged_amount - evidence.captured_amount
                         or evidence.split_id is not None
                     )
                 )
@@ -354,14 +356,14 @@ class CheckoutService:
                 operations = current.setdefault("operations", {})
                 op = operations.get(op_id)
                 if op is not None:
-                    if op["action"] != action or op["amount"] != amount:
+                    if op["action"] != action or op["amount"] != exact_amount:
                         raise CommerceError("Concurrent operation identity changed.")
                 else:
                     if any(other["state"] != "confirmed" for other in operations.values()):
                         raise CommerceError("Retry or reconcile the unresolved operation first.")
                     op = {
                         "action": action,
-                        "amount": amount,
+                        "amount": exact_amount,
                         "key": "lunixi-op-" + secrets.token_hex(24),
                         "state": "pending",
                         "createdAt": self.clock(),

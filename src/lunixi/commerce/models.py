@@ -18,30 +18,21 @@ class CommerceError(LunixiError):
 
 
 def integer(value: Any) -> int:
-    if isinstance(value, str) and re.fullmatch(r"[0-9]{1,16}", value):
-        value = int(value)
-    return amount_minor(value, positive=False)
+    """Strict wire decoder; integer arithmetic begins only after validation."""
+    return int(amount_minor(value, positive=False))
 
 
-def minor_units(decimal: str, currency: str = "TRY") -> int:
+def minor_units(decimal: str, currency: str) -> str:
     """Exact decimal string conversion; floats and fractional minor units fail."""
-    exponent = 0 if currency_code(currency) == "JPY" else 3 if currency == "KWD" else 2
-    if not isinstance(decimal, str) or not re.fullmatch(r"[0-9]{1,16}(?:[.][0-9]{1,8})?", decimal):
-        raise ConfigurationError("A plain positive decimal string is required.")
-    try:
-        value = Decimal(decimal) * (10**exponent)
-        if value != value.to_integral_value():
-            raise ConfigurationError("Fractional minor units are not permitted.")
-        return amount_minor(int(value))
-    except InvalidOperation:
-        raise ConfigurationError("Invalid decimal amount.") from None
+    from ..validation import decimal_to_minor
+    return amount_minor(decimal_to_minor(decimal, currency))
 
 
 @dataclass(frozen=True)
 class OrderSnapshot:
     merchant_id: str
     order_id: str
-    amount: int
+    amount: str
     currency: str
 
     def __post_init__(self) -> None:
@@ -67,7 +58,7 @@ class OrderSnapshot:
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> OrderSnapshot:
         return cls(
-            value["merchantId"], value["orderId"], integer(value["amount"]), value["currency"]
+            value["merchantId"], value["orderId"], amount_minor(value["amount"]), value["currency"]
         )
 
     @property
@@ -128,7 +119,7 @@ def evaluate(
         and isinstance(metadata.get("lunixiCommerce"), dict)
         and metadata["lunixiCommerce"].get("fingerprint") == order.fingerprint
     )
-    if amount < order.amount or (amount != order.amount and not correlated):
+    if amount < int(order.amount) or (amount != int(order.amount) and not correlated):
         raise CommerceError("Authenticated charged amount does not match the order.")
     status = p.get("status")
     if not isinstance(status, str):
@@ -158,7 +149,7 @@ def evaluate(
         ):
             raise CommerceError("Split payment requires reconciliation.")
         captured = integer(a.get("capturedAmount"))
-        refunded = integer(s.get("refund", {}).get("refundedAmount", 0))
+        refunded = integer(s.get("refund", {}).get("refundedAmount", "0"))
         compensated = integer(a.get("compensatedAmount"))
         if captured > amount or refunded > captured:
             raise CommerceError("Invalid split settlement balances.")

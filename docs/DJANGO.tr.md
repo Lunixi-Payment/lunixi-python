@@ -2,7 +2,7 @@
 
 Önce [sunucu kurulumu ve temel kurallar](FRAMEWORKS.tr.md) okunmalıdır. Bu, gerçek native testleri olan çalışan kaynak uygulamadır; ayrı paket kaydı iddiası yoktur. `LUNIXI_PUBLIC_ORIGIN` aşağıdaki HTTPS origin/port ile eşleşmelidir. TLS dosyaları operatör tarafından sağlanır; repoda sertifika/özel anahtar yoktur.
 
-**[SDK 0.2.1 PyPI’da yayımlandı](https://pypi.org/project/lunixi-sdk/0.2.1/)**; mevcut uygulamanıza `pip install lunixi-sdk==0.2.1` ile kurabilirsiniz. Bu örnek uygulama için [v0.2.1 kaynak etiketini](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.1) ve ortak kurulumdaki kilitli ortamı kullanın; ayrı bir framework paketi yayımlanmamıştır.
+SDK 1.0.0 PyPI üzerinde kullanılabilir olduğunda `pip install lunixi-sdk==1.0.0` ile kurun. Çalışan framework örnekleri ve kilitli ortam için eşleşen [v1.0.0 kaynak etiketini](https://github.com/Lunixi-Payment/lunixi-python/tree/v1.0.0) kullanın. Framework uygulamaları ayrı paket değildir ve SDK wheel dosyasına dahil değildir. Para sözleşmesi için [geçiş rehberini](../MIGRATION-1.0.md) uygulayın.
 
 ```sh
 python -m integrations.django_app.manage migrate

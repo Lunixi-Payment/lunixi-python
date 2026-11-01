@@ -17,6 +17,7 @@ from .configuration import DEFAULT_AUTH_TOKEN_PATH, Configuration
 from .fraud.fraud_client import FraudClient
 from .http.transport import HttpTransport
 from .payments import PaymentsClient
+from .physical_pos import PhysicalPosClient, PhysicalPosManagementClient
 from .webhook.verifier import WebhookVerifier
 
 __all__ = ["LunixiClient"]
@@ -90,10 +91,20 @@ class LunixiClient:
         self._api = ApiClient(self._config, self._signer, self._tokens)
         self._fraud = FraudClient(self._api)
         self._payments = PaymentsClient(self._api)
+        self._physical_pos = PhysicalPosClient(self._api)
+        self._physical_pos_management = PhysicalPosManagementClient(self._api)
 
     def payments(self) -> PaymentsClient:
         """Typed payment intent, read, capture, refund, void and split operations."""
         return self._payments
+
+    def physical_pos(self) -> PhysicalPosClient:
+        """Physical POS payments, transactions, reports and end-of-day results."""
+        return self._physical_pos
+
+    def physical_pos_management(self) -> PhysicalPosManagementClient:
+        """Physical POS overview, catalog, stores, registers, terminals and devices."""
+        return self._physical_pos_management
 
     def fraud(self) -> FraudClient:
         """The fraud surface: decisions, decision logs and event ingest."""

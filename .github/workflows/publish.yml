@@ -13,7 +13,7 @@ on:
       tag:
         description: Release tag to publish (vX.Y.Z); select that same tag above
         required: true
-        default: v0.2.1
+        default: v1.0.0
         type: string
 
 permissions:

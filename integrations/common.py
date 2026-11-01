@@ -190,7 +190,7 @@ INSERT OR IGNORE INTO sample_stock(sku,quantity) VALUES('sample-product',100);""
             connection.close()
 
     def seed(
-        self, owner: str, amount: int = 1990, currency: str = "TRY", *, hold: bool = False
+        self, owner: str, amount: str = "1990", currency: str = "TRY", *, hold: bool = False
     ) -> tuple[str, str]:
         amount_minor(amount)
         currency_code(currency)
@@ -255,7 +255,7 @@ INSERT OR IGNORE INTO sample_stock(sku,quantity) VALUES('sample-product',100);""
 
     def start(self, key: str, owner: Any) -> dict[str, Any]:
         row = self.owned(key, owner)
-        snapshot = OrderSnapshot(self.settings.merchant_id, key, row["amount"], row["currency"])
+        snapshot = OrderSnapshot(self.settings.merchant_id, key, str(row["amount"]), row["currency"])
         result = self.service.start(
             key,
             snapshot,
@@ -282,7 +282,7 @@ INSERT OR IGNORE INTO sample_stock(sku,quantity) VALUES('sample-product',100);""
             row is None
             or order.fingerprint
             != OrderSnapshot(
-                self.settings.merchant_id, row["id"], row["amount"], row["currency"]
+                self.settings.merchant_id, row["id"], str(row["amount"]), row["currency"]
             ).fingerprint
         ):
             raise CommerceError("The persisted native order changed after reservation.")
@@ -331,7 +331,7 @@ INSERT OR IGNORE INTO sample_stock(sku,quantity) VALUES('sample-product',100);""
                 and record is not None
                 and record["snapshot"]
                 == OrderSnapshot(
-                    self.settings.merchant_id, key, row["amount"], row["currency"]
+                    self.settings.merchant_id, key, str(row["amount"]), row["currency"]
                 ).to_dict()
                 and row["state"] in ("paid", "partially_refunded")
                 and not row["fulfillment_hold"]

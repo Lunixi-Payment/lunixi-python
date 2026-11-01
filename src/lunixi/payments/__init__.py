@@ -14,6 +14,13 @@ from ..validation import amount_minor, currency_code, header_value, identifier
 _BASE = "/api/v1/payments"
 
 
+class _OmittedAmount:
+    """Private marker: a missing argument is distinct from explicit None."""
+
+
+_OMITTED_AMOUNT = _OmittedAmount()
+
+
 def _key(value: str) -> str:
     return header_value(value, "idempotency_key")
 
@@ -28,7 +35,7 @@ def validate_amount_body(body: Mapping[str, Any]) -> None:
 
 @dataclass(frozen=True)
 class CreateIntent:
-    amount: int
+    amount: str
     currency: str
     order_id: str
     callback_url: Optional[str] = None
@@ -145,17 +152,17 @@ class PaymentsClient:
     def list(self, **filters: Any) -> dict[str, Any]:
         return self._api.request("GET", _BASE, query=filters)
 
-    def capture(self, payment_id: str, amount: int, *, idempotency_key: str) -> dict[str, Any]:
+    def capture(self, payment_id: str, amount: str | _OmittedAmount = _OMITTED_AMOUNT, *, idempotency_key: str) -> dict[str, Any]:
         return self._api.request(
             "POST",
             _BASE + "/" + identifier(payment_id) + "/capture",
-            {"amount": amount_minor(amount)},
+            ({} if amount is _OMITTED_AMOUNT else {"amount": amount_minor(amount)}),
             step_up=True,
             idempotency_key=_key(idempotency_key),
         )
 
     def refund(
-        self, payment_id: str, amount: int, *, idempotency_key: str, reason: Optional[str] = None
+        self, payment_id: str, amount: str | _OmittedAmount = _OMITTED_AMOUNT, *, idempotency_key: str, reason: Optional[str] = None
     ) -> dict[str, Any]:
         return self._refund(
             _BASE + "/" + identifier(payment_id) + "/refund", amount, idempotency_key, reason
@@ -181,7 +188,7 @@ class PaymentsClient:
     def refund_split(
         self,
         split_payment_id: str,
-        amount: int,
+        amount: str,
         *,
         idempotency_key: str,
         reason: Optional[str] = None,
@@ -193,8 +200,8 @@ class PaymentsClient:
             reason,
         )
 
-    def _refund(self, path: str, amount: int, key: str, reason: Optional[str]) -> dict[str, Any]:
-        body: dict[str, Any] = {"amount": amount_minor(amount)}
+    def _refund(self, path: str, amount: str | _OmittedAmount, key: str, reason: Optional[str]) -> dict[str, Any]:
+        body: dict[str, Any] = {} if amount is _OMITTED_AMOUNT else {"amount": amount_minor(amount)}
         if reason is not None:
             if not isinstance(reason, str) or len(reason) > 500:
                 raise ConfigurationError("Refund reason exceeds 500 characters.")

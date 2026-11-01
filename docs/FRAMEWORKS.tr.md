@@ -1,11 +1,11 @@
 # Çalışan framework entegrasyonları
 
-**[SDK 0.2.1 PyPI’da yayımlandı](https://pypi.org/project/lunixi-sdk/0.2.1/)** ve `pip install lunixi-sdk==0.2.1` ile kurulabilir. Çalışan framework uygulamaları ve kilitli ortamları eşleşen [v0.2.1 kaynak etiketindedir](https://github.com/Lunixi-Payment/lunixi-python/tree/v0.2.1); ayrı paket değildir ve SDK wheel dosyasına dahil değildir.
+SDK 1.0.0 PyPI üzerinde kullanılabilir olduğunda `pip install lunixi-sdk==1.0.0` ile kurun. Çalışan framework örnekleri ve kilitli ortam için eşleşen [v1.0.0 kaynak etiketini](https://github.com/Lunixi-Payment/lunixi-python/tree/v1.0.0) kullanın. Framework uygulamaları ayrı paket değildir ve SDK wheel dosyasına dahil değildir. Para sözleşmesi için [geçiş rehberini](../MIGRATION-1.0.md) uygulayın.
 
 Bunlar ayrı paket kayıtları değil, aynı SDK/Commerce çekirdeğini kullanan tam kaynak uygulamalardır. Doğrulanan hedefler Python 3.12 üzerinde Django 6.1.2, FastAPI 0.162.0 ve Flask 3.1.3'tür. Gerçek kullanıcı/sipariş/stok/olay tabloları kullanılır. Mevcut mağazada kendi auth/sipariş/teslim modellerine aynı transaction sözleşmesi uygulanmalıdır.
 
 ```sh
-git clone --branch v0.2.1 --depth 1 https://github.com/Lunixi-Payment/lunixi-python.git
+git clone --branch v1.0.0 --depth 1 https://github.com/Lunixi-Payment/lunixi-python.git
 cd lunixi-python
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements-dev.lock
@@ -39,7 +39,7 @@ Framework örneklerinde varsayılan `LUNIXI_CHECKOUT_MODE=embedded` değeridir. 
 
 İki mod aynı formu kullanır; açık yöntemler, çoklu kart, taksit ve sigorta yönlendirme gerektirmez. Token ve sayfa adresi ayrı authenticated bağlamlarla şifrelenir. Kayıtlı dönüş adresi/mod/gövde/hash/anahtar değişmez; ayar değişikliği yeni tahsilat başlatamaz. Eski yönlendirmeli denemede backend adresi yoksa mutabakat gerekir. Ham webhook, sahiplik/oturum/CSRF, doğrulanmış tahsilat ve bilgilendirici 3DS/çoklu kart dönüşleri korunur.
 
-0.2.1 kaynak sürümü için 27 odaklı SDK/native Django/FastAPI/Flask kontrolü geçti; önceki tam 0.2.0 doğrulaması temel kanıt olarak korunur. Canlı tahsilat veya yeni geniş merchant kabulü yapılmadı.
+Geçmiş 0.2.1 kaynak sürümü için 27 odaklı SDK/native Django/FastAPI/Flask kontrolü geçti; önceki tam 0.2.0 doğrulaması temel kanıt olarak korunur. Canlı tahsilat veya yeni geniş merchant kabulü yapılmadı.
 
 Checkout sayfasının CSP’si form POST’u için yalnız `'self'` ve yapılandırılan gateway origin’ine (varsayılan `https://api-gateway.lunixi.com`) izin verir. Böylece tarayıcı SDK’sının desteklediği cüzdan/sağlayıcı ve eski POST geçişleri korunur. İncelenmiş başka bir sağlayıcı gerekiyorsa yalnız sunucuda `LUNIXI_FORM_ACTION_ORIGINS` tanımlayın: virgülle ayrılmış tam HTTPS origin’leri; boşluk, yol, sondaki slash, kullanıcı bilgisi, sorgu, fragment ve wildcard kabul edilmez. Geçersiz ayar reddedilir; gateway yanıtı veya tarayıcı alanı listeyi genişletemez. Script nonce, frame/connect sınırları ve bilgilendirici dönüş güvenliği korunur.
 

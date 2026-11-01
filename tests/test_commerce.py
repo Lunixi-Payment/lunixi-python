@@ -53,7 +53,7 @@ def test_js_serialization_numeric_keys_and_ecmascript_numbers():
         serialize_body({"n": 9007199254740992})
 
 
-@pytest.mark.parametrize("value", [True, 0, -1, 1.01, "100", 9007199254740992])
+@pytest.mark.parametrize("value", [True, 0, -1, 1.01, 100, "01", 9007199254740992])
 def test_money_rejected_before_network(payment_setup, value):
     orders, gateway = payment_setup
     before = len(gateway.calls)
@@ -65,12 +65,12 @@ def test_money_rejected_before_network(payment_setup, value):
 
 
 def test_exact_decimal_and_currency():
-    assert minor_units("19.90") == 1990
-    assert minor_units("1", "JPY") == 1
-    assert minor_units("1.001", "KWD") == 1001
+    assert minor_units("19.90", "TRY") == "1990"
+    assert minor_units("1", "JPY") == "1"
+    assert minor_units("1.001", "KWD") == "1001"
     for value in ("1e3", "1.001", "nan"):
         with pytest.raises(ConfigurationError):
-            minor_units(value)
+            minor_units(value, "TRY")
 
 
 def test_signed_replay_collision_native_rollback_and_encrypted_token(payment_setup):
@@ -170,27 +170,27 @@ def test_lost_response_signed_recovery_and_no_rebinding(payment_setup):
 def test_mutation_delayed_confirmation_partial_refund_and_void(payment_setup):
     orders, gateway = payment_setup
     key, _ = orders.seed("owner")
-    snapshot = OrderSnapshot("merchant_test", key, 1990, "TRY")
+    snapshot = OrderSnapshot("merchant_test", key, "1990", "TRY")
     intent = orders.service.start(key, snapshot, "https://testserver/return/" + key, preauth=True)
     assert orders.service.reconcile(key, orders.apply).state == "authorized"
     gateway.defer = True
-    orders.service.mutate(key, "capture-operation", "capture", 1000, orders.apply)
+    orders.service.mutate(key, "capture-operation", "capture", "1000", orders.apply)
     assert orders.service.operation_status(key, "capture-operation")["state"] == "pending"
     with pytest.raises(CommerceError):
-        orders.service.mutate(key, "another-operation", "capture", 990, orders.apply)
+        orders.service.mutate(key, "another-operation", "capture", "990", orders.apply)
     gateway.payments[intent.payment_id]["data"]["status"] = "PARTIALLY_CAPTURED"
-    gateway.payments[intent.payment_id]["details"]["capturedAmount"] = 1000
+    gateway.payments[intent.payment_id]["details"]["capturedAmount"] = "1000"
     orders.service.reconcile(key, orders.apply)
     assert orders.service.operation_status(key, "capture-operation")["state"] == "confirmed"
     assert not orders.complete(key, "owner")
     gateway.defer = False
-    orders.service.mutate(key, "capture-remainder", "capture", 990, orders.apply)
+    orders.service.mutate(key, "capture-remainder", "capture", "990", orders.apply)
     assert orders.complete(key, "owner")
-    orders.service.mutate(key, "refund-part", "refund", 500, orders.apply)
+    orders.service.mutate(key, "refund-part", "refund", "500", orders.apply)
     assert orders.service.operation_status(key, "refund-part")["state"] == "confirmed"
     with pytest.raises(CommerceError):
-        orders.service.mutate(key, "overrefund", "refund", 1491, orders.apply)
-    orders.service.mutate(key, "refund-rest", "refund", 1490, orders.apply)
+        orders.service.mutate(key, "overrefund", "refund", "1491", orders.apply)
+    orders.service.mutate(key, "refund-rest", "refund", "1490", orders.apply)
     assert not orders.complete(key, "owner")
     connection = orders.store.connect()
     assert connection.execute("SELECT quantity FROM sample_stock").fetchone()[0] == 100
@@ -221,28 +221,28 @@ def test_failed_without_certainty_is_review_and_does_not_complete(payment_setup)
 
 
 def test_fee_and_split_parent_require_complete_balanced_evidence():
-    order = OrderSnapshot("merchant_test", "order", 1990, "TRY")
+    order = OrderSnapshot("merchant_test", "order", "1990", "TRY")
     p = {
         "id": "pi_parent",
         "merchantId": "merchant_test",
         "orderId": "order",
         "currency": "TRY",
-        "amount": 2090,
+        "amount": "2090",
         "status": "CAPTURED",
         "metadata": {"lunixiCommerce": {"fingerprint": order.fingerprint}},
     }
     assert evaluate(
-        order, "pi_parent", {"data": p, "details": {"capturedAmount": 2090, "refundedAmount": 0}}
+        order, "pi_parent", {"data": p, "details": {"capturedAmount": "2090", "refundedAmount": "0"}}
     ).paid
     p["metadata"] = {}
     with pytest.raises(CommerceError):
         evaluate(
             order,
             "pi_parent",
-            {"data": p, "details": {"capturedAmount": 2090, "refundedAmount": 0}},
+            {"data": p, "details": {"capturedAmount": "2090", "refundedAmount": "0"}},
         )
     p.update(
-        amount=1990,
+        amount="1990",
         status="SETTLED_BY_SPLIT",
         split={"role": "PARENT", "splitPaymentId": "split_one"},
     )
@@ -256,11 +256,11 @@ def test_fee_and_split_parent_require_complete_balanced_evidence():
             "needsReconciliation": False,
             "aggregate": {
                 "amountsBalanced": True,
-                "totalAmount": 1990,
-                "legsAmount": 1990,
-                "capturedAmount": 1990,
-                "compensatedAmount": 0,
-                "authorizedAmount": 0,
+                "totalAmount": "1990",
+                "legsAmount": "1990",
+                "capturedAmount": "1990",
+                "compensatedAmount": "0",
+                "authorizedAmount": "0",
             },
         }
     }
@@ -274,7 +274,7 @@ def test_void_requires_authenticated_release_and_does_not_fulfill(payment_setup)
     key, _ = orders.seed("owner")
     result = orders.service.start(
         key,
-        OrderSnapshot("merchant_test", key, 1990, "TRY"),
+        OrderSnapshot("merchant_test", key, "1990", "TRY"),
         "https://testserver/return/" + key,
         preauth=True,
     )
@@ -293,18 +293,18 @@ def test_lost_mutation_confirms_by_get_and_expired_unconfirmed_operation_is_not_
     key, _ = orders.seed("owner")
     orders.service.start(
         key,
-        OrderSnapshot("merchant_test", key, 1990, "TRY"),
+        OrderSnapshot("merchant_test", key, "1990", "TRY"),
         "https://testserver/return/" + key,
         preauth=True,
     )
     gateway.lost_mutation = True
     with pytest.raises(ApiError):
-        orders.service.mutate(key, "lost-capture", "capture", 1990, orders.apply)
+        orders.service.mutate(key, "lost-capture", "capture", "1990", orders.apply)
     assert orders.service.operation_status(key, "lost-capture")["state"] == "uncertain"
     orders.service.clock = lambda: time.time() + 24 * 3600
     calls = len(gateway.calls)
     with pytest.raises(CommerceError, match="window expired"):
-        orders.service.mutate(key, "lost-capture", "capture", 1990, orders.apply)
+        orders.service.mutate(key, "lost-capture", "capture", "1990", orders.apply)
     assert len(gateway.calls) == calls
     assert orders.service.reconcile(key, orders.apply).paid
     assert orders.service.operation_status(key, "lost-capture")["state"] == "confirmed"
