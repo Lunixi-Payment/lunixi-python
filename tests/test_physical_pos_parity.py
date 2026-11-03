@@ -66,6 +66,7 @@ _ROUTES = {
     "list_terminal_audit": "history",
     "list_device_assignments": "history",
     "list_device_audit": "history",
+    "list_device_keys": "history",
 }
 
 
@@ -142,6 +143,9 @@ def test_request_field_lists_match_the_gateway_dtos():
         "updateDevice": management._UPDATE_DEVICE,
         "assignDevice": management._ASSIGN_DEVICE,
         "changeDeviceLifecycle": management._DEVICE_LIFECYCLE,
+        "revokeDeviceKey": management._REVOKE_DEVICE_KEY,
+        "revertDeviceEnrollment": management._REVERT_DEVICE_ENROLLMENT,
+        "revokeActivationCode": management._REVOKE_ACTIVATION_CODE,
     }
     for name, schema in schemas.items():
         assert sorted(schema) == sorted(fields[name]), name

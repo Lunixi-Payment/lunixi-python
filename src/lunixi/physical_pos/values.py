@@ -219,6 +219,7 @@ PHYSICAL_POS_FILTERS: Dict[str, Tuple[str, ...]] = {
     ),
     "list_device_assignments": _PAGE,
     "list_device_audit": _PAGE,
+    "list_device_keys": _PAGE,
 }
 
 #: Free-text filters scanned for card numbers before sending (wire names).

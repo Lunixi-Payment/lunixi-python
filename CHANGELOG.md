@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-11-03
+
+- Physical POS device identity on `client.physical_pos_management()`: `list_device_keys()` / `iterate_device_keys()` (`GET /devices/{deviceId}/keys`, `physical_pos:view`), `revoke_device_key()`, `revert_device_enrollment()` and `revoke_activation_code()` (`physical_pos:identity`; no `Idempotency-Key`). Key ids are `pdk_…`, not UUIDs. Activation codes are not issued with an API key (panel only).
+
 ## 1.0.2 — 2026-11-01
 
 - Preserve an unknown physical POS payment outcome and its original operation key when deeply nested post-send responses exceed recursive validation limits.

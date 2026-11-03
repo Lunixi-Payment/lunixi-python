@@ -1,7 +1,9 @@
 """Physical POS management: overview, catalog, stores, registers, terminals, devices.
 
-Reads need the ``physical_pos:view`` scope, writes ``physical_pos:manage``.
-Every call is signed per request. A TEST key reads only.
+Reads need the ``physical_pos:view`` scope, writes ``physical_pos:manage``;
+the device identity writes (key revocation, enrollment revert,
+activation-code revocation) need ``physical_pos:identity``. Every call is
+signed per request. A TEST key reads only.
 
 Updates and state changes take the record's last read ``row_version``; a stale
 one is refused with ``409 physical_pos.version_conflict`` — read again and
@@ -14,8 +16,7 @@ generates a UUID when you pass none and returns it in
 with the same body returns the first result (``replayed``); with another body
 it is ``409 physical_pos.idempotency_mismatch``. Use a new key per operation.
 
-Device identity routes (activation codes, device keys) are not part of this
-client.
+Activation codes are issued in the panel only (an API key cannot issue one).
 """
 
 from __future__ import annotations
@@ -118,6 +119,12 @@ _DEVICE_LIFECYCLE: s.Schema = {
     "target": ("str", True, False),
     "reasonCode": ("str", True, False),
 }
+_REVOKE_DEVICE_KEY: s.Schema = {
+    "rowVersion": ("row_version", True, False),
+    "reasonCode": ("str", True, False),
+}
+_REVERT_DEVICE_ENROLLMENT: s.Schema = {"reasonCode": ("str", True, False)}
+_REVOKE_ACTIVATION_CODE: s.Schema = {"reasonCode": ("str", True, False)}
 
 
 class PhysicalPosManagementClient:
@@ -471,7 +478,67 @@ class PhysicalPosManagementClient:
             lambda **f: self.list_device_audit(device_id, **f), filters
         )
 
+    # ── Device identity ─────────────────────────────────────────────────────
+
+    def list_device_keys(self, device_id: str, **filters: Any) -> Page:
+        """The device's identity keys, fingerprints only. Filters: ``limit``, ``cursor``.
+
+        Each key: ``keyId`` (``pdk_…``), ``algorithm`` (``ED25519``),
+        ``keyStatus`` (``ACTIVE`` | ``SUPERSEDED`` | ``REVOKED``),
+        ``enrolledVia`` (``PAIRING`` | ``ACTIVATION_CODE`` | ``ROTATION``),
+        ``fingerprint`` (``XXXX-XXXX``), ``lineageRootKeyId``,
+        ``rotatedFromKeyId``, ``activatedAt``, ``supersededAt``, ``revokedAt``,
+        ``revokeReason``, ``rowVersion``.
+        """
+        path = f"/devices/{s.path_id(device_id, 'device_id')}/keys"
+        return Page(self._get(path, s.query(filters, "list_device_keys")))
+
+    def iterate_device_keys(self, device_id: str, **filters: Any) -> Iterator[Dict[str, Any]]:
+        return PhysicalPosClient._iterate(
+            lambda **f: self.list_device_keys(device_id, **f), filters
+        )
+
+    def revoke_device_key(
+        self,
+        device_id: str,
+        key_id: str,
+        request: Optional[Mapping[str, Any]] = None,
+        **fields: Any,
+    ) -> Dict[str, Any]:
+        """Revokes a device key: ``row_version`` (the key's), ``reason_code``
+        (``DEVICE_LOST`` | ``DEVICE_STOLEN`` | ``KEY_COMPROMISED`` |
+        ``DEVICE_REPLACED`` | ``MERCHANT_REQUEST`` | ``OTHER``).
+        ``{key, lifecycleStatus, replayed}``."""
+        path = f"{self._key_path(device_id, key_id)}/revoke"
+        return s.data(self._send("POST", path, _merge(request, fields), _REVOKE_DEVICE_KEY))
+
+    def revert_device_enrollment(
+        self,
+        device_id: str,
+        key_id: str,
+        request: Optional[Mapping[str, Any]] = None,
+        **fields: Any,
+    ) -> Dict[str, Any]:
+        """Reverts an activation-code enrollment (revokes the key, suspends the
+        device): ``reason_code`` (``NOT_MY_DEVICE`` | ``SUSPECTED_PHISHING`` |
+        ``WRONG_DEVICE`` | ``OTHER``). ``{key, lifecycleStatus, replayed}``."""
+        path = f"{self._key_path(device_id, key_id)}/revert-enrollment"
+        return s.data(self._send("POST", path, _merge(request, fields), _REVERT_DEVICE_ENROLLMENT))
+
+    def revoke_activation_code(
+        self, device_id: str, request: Optional[Mapping[str, Any]] = None, **fields: Any
+    ) -> Dict[str, Any]:
+        """Revokes the device's open activation code: ``reason_code``
+        (``MERCHANT_REVOKED`` | ``DEVICE_LOST`` | ``DEVICE_STOLEN`` | ``OTHER``).
+        ``{deviceId, revokedAt, revokeReason}``."""
+        path = f"/devices/{s.path_id(device_id, 'device_id')}/activation-code/revoke"
+        return s.data(self._send("POST", path, _merge(request, fields), _REVOKE_ACTIVATION_CODE))
+
     # ── Internals ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _key_path(device_id: str, key_id: str) -> str:
+        return f"/devices/{s.path_id(device_id, 'device_id')}/keys/{s.path_id(key_id, 'key_id')}"
 
     def _get(self, path: str, query: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
         return s.call(

@@ -319,11 +319,113 @@ class TestDevices:
         assert caught.value.field == "card_number"
         assert transport.requests == []
 
-    def test_there_are_no_identity_methods(self, client_factory):
+    def test_activation_codes_are_not_issued_with_an_api_key(self, client_factory):
         _, client = client_factory()
         mgmt = client.physical_pos_management()
         assert not hasattr(mgmt, "issue_activation_code")
-        assert not hasattr(mgmt, "revoke_device_key")
+        assert callable(mgmt.revoke_device_key)
+
+
+DEVICE_KEY_ID = "pdk_AAAAAAAAAAAAAAAAAAAAAAAA"
+DEVICE_KEY = {
+    "keyId": DEVICE_KEY_ID,
+    "algorithm": "ED25519",
+    "keyStatus": "ACTIVE",
+    "enrolledVia": "PAIRING",
+    "fingerprint": "ABCD-EF12",
+    "lineageRootKeyId": DEVICE_KEY_ID,
+    "rotatedFromKeyId": None,
+    "activatedAt": "2026-11-01T09:00:00.000Z",
+    "supersededAt": None,
+    "revokedAt": None,
+    "revokeReason": None,
+    "rowVersion": 1,
+}
+
+
+class TestDeviceIdentity:
+    def test_device_identity_routes(self, client_factory):
+        info = {"hasMore": True, "nextCursor": "k1", "totalCount": None}
+        revoked = dict(DEVICE_KEY, keyStatus="REVOKED", revokeReason="DEVICE_LOST", rowVersion=2)
+        transport, client = client_factory(
+            answer({"items": [DEVICE_KEY], "pageInfo": info}, pageInfo=info),
+            answer({"key": revoked, "lifecycleStatus": "SUSPENDED", "replayed": False}),
+            answer({"key": revoked, "lifecycleStatus": "SUSPENDED", "replayed": True}),
+            answer(
+                {
+                    "deviceId": DEVICE_ID,
+                    "revokedAt": "2026-11-02T09:00:00.000Z",
+                    "revokeReason": "MERCHANT_REVOKED",
+                }
+            ),
+        )
+        mgmt = client.physical_pos_management()
+        page = mgmt.list_device_keys(DEVICE_ID, limit=10)
+        assert transport.last.path == f"{BASE}/devices/{DEVICE_ID}/keys?limit=10"
+        assert query_of(transport.last) == {"limit": "10"}
+        assert page.items[0]["keyId"] == DEVICE_KEY_ID
+        assert page.has_more is True and page.next_cursor == "k1"
+
+        result = mgmt.revoke_device_key(
+            DEVICE_ID, DEVICE_KEY_ID, row_version=1, reason_code="DEVICE_LOST"
+        )
+        assert transport.last.method == "POST"
+        assert transport.last.path == f"{BASE}/devices/{DEVICE_ID}/keys/{DEVICE_KEY_ID}/revoke"
+        assert json.loads(transport.last.body) == {"rowVersion": 1, "reasonCode": "DEVICE_LOST"}
+        assert transport.last.header("Idempotency-Key") is None
+        assert result["key"]["keyStatus"] == "REVOKED"
+        assert result["lifecycleStatus"] == "SUSPENDED"
+        assert result["replayed"] is False
+
+        reverted = mgmt.revert_device_enrollment(
+            DEVICE_ID, DEVICE_KEY_ID, {"reasonCode": "NOT_MY_DEVICE"}
+        )
+        assert (
+            transport.last.path
+            == f"{BASE}/devices/{DEVICE_ID}/keys/{DEVICE_KEY_ID}/revert-enrollment"
+        )
+        assert json.loads(transport.last.body) == {"reasonCode": "NOT_MY_DEVICE"}
+        assert transport.last.header("Idempotency-Key") is None
+        assert reverted["replayed"] is True
+
+        code = mgmt.revoke_activation_code(DEVICE_ID, reason_code="MERCHANT_REVOKED")
+        assert transport.last.path == f"{BASE}/devices/{DEVICE_ID}/activation-code/revoke"
+        assert json.loads(transport.last.body) == {"reasonCode": "MERCHANT_REVOKED"}
+        assert transport.last.header("Idempotency-Key") is None
+        assert code["revokeReason"] == "MERCHANT_REVOKED"
+
+    def test_iterate_device_keys_follows_the_cursor(self, client_factory):
+        first = {"hasMore": True, "nextCursor": "k1", "totalCount": None}
+        last = {"hasMore": False, "nextCursor": None, "totalCount": None}
+        other = dict(DEVICE_KEY, keyId="pdk_BBBBBBBBBBBBBBBBBBBBBBBB")
+        transport, client = client_factory(
+            answer({"items": [DEVICE_KEY], "pageInfo": first}, pageInfo=first),
+            answer({"items": [other], "pageInfo": last}, pageInfo=last),
+        )
+        keys = [k["keyId"] for k in client.physical_pos_management().iterate_device_keys(DEVICE_ID)]
+        assert keys == [DEVICE_KEY_ID, "pdk_BBBBBBBBBBBBBBBBBBBBBBBB"]
+        assert query_of(transport.requests[-1]) == {"cursor": "k1"}
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda m: m.revoke_device_key(DEVICE_ID, "", row_version=1, reason_code="OTHER"),
+            lambda m: m.revoke_device_key(
+                DEVICE_ID, DEVICE_KEY_ID, row_version="1", reason_code="OTHER"
+            ),
+            lambda m: m.revoke_device_key(DEVICE_ID, DEVICE_KEY_ID, reason_code="OTHER"),
+            lambda m: m.revert_device_enrollment(
+                DEVICE_ID, DEVICE_KEY_ID, reason_code="OTHER", row_version=1
+            ),
+            lambda m: m.revoke_activation_code(DEVICE_ID),
+            lambda m: m.list_device_keys(DEVICE_ID, include_total=True),
+        ],
+    )
+    def test_malformed_identity_requests_are_refused_before_sending(self, client_factory, call):
+        transport, client = client_factory()
+        with pytest.raises(ConfigurationError):
+            call(client.physical_pos_management())
+        assert transport.requests == []
 
 
 class TestCatalogAndOverview:
