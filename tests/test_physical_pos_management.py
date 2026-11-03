@@ -1,7 +1,7 @@
 """Physical POS management: stores, registers, terminals, devices, catalog, overview.
 
 Contract source: nest-payment-gateway apps/api-gateway/src/physical-pos/
-{stores,terminals,devices,catalog,overview}/*-api.controller.ts, their DTOs,
+{stores,terminals,devices,settlements,catalog,overview}/*-api.controller.ts, their DTOs,
 mappers and services. Ids and values below are synthetic.
 """
 
@@ -23,6 +23,8 @@ REGISTER_ID = "22222222-2222-4222-8222-222222222222"
 TERMINAL_ID = "33333333-3333-4333-8333-333333333333"
 ACQUIRER_ID = "44444444-4444-4444-8444-444444444444"
 DEVICE_ID = "55555555-5555-4555-8555-555555555555"
+PROVIDER_ROW_ID = "66666666-6666-4666-8666-666666666666"
+VENDOR_ACCOUNT_ID = "77777777-7777-4777-8777-777777777777"
 KEY = "mgmt-test-key-0001"
 UUID_V4 = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 BASE = "/api/v1/physical-pos"
@@ -462,3 +464,214 @@ class TestCatalogAndOverview:
         assert caught.value.code == "physical_pos.store.code_taken"
         assert caught.value.idempotency_key == KEY
         assert not isinstance(caught.value, ValidationError)
+
+
+PROVIDER = {
+    "id": PROVIDER_ROW_ID,
+    "terminalId": TERMINAL_ID,
+    "environment": "LIVE",
+    "providerCode": "METROPOL",
+    "vendorAccountId": VENDOR_ACCOUNT_ID,
+    "merchantCode": "1000000001",
+    "terminalCode": "2000000002",
+    "productCode": "3",
+    "label": None,
+    "providerStatus": "ACTIVE",
+    "rowVersion": 1,
+    "createdAt": "2026-11-01T09:00:00.000Z",
+    "updatedAt": "2026-11-01T09:00:00.000Z",
+}
+
+
+class TestTerminalProviders:
+    def test_terminal_provider_routes(self, client_factory):
+        info = {"hasMore": False, "nextCursor": None, "totalCount": 1}
+        transport, client = client_factory(
+            answer({"items": [PROVIDER], "pageInfo": info}, pageInfo=info),
+            answer({"provider": PROVIDER, "replayed": False}, 201),
+            answer({"provider": PROVIDER, "replayed": True}, 200),
+            answer({"provider": dict(PROVIDER, providerStatus="DISABLED", rowVersion=2)}),
+        )
+        mgmt = client.physical_pos_management()
+        page = mgmt.list_terminal_providers(TERMINAL_ID, limit=10, include_total=True)
+        assert transport.last.path.startswith(f"{BASE}/terminals/{TERMINAL_ID}/providers?")
+        assert query_of(transport.last) == {"limit": "10", "includeTotal": "true"}
+        assert page.items[0]["providerCode"] == "METROPOL"
+
+        added = mgmt.add_terminal_provider(
+            TERMINAL_ID,
+            vendor_account_id=VENDOR_ACCOUNT_ID,
+            merchant_code="1000000001",
+            terminal_code="2000000002",
+            product_code="3",
+            label="Meal",
+            idempotency_key=KEY,
+        )
+        assert transport.last.method == "POST"
+        assert transport.last.path == f"{BASE}/terminals/{TERMINAL_ID}/providers"
+        assert json.loads(transport.last.body) == {
+            "vendorAccountId": VENDOR_ACCOUNT_ID,
+            "merchantCode": "1000000001",
+            "terminalCode": "2000000002",
+            "productCode": "3",
+            "label": "Meal",
+        }
+        assert transport.last.header("Idempotency-Key") == KEY
+        assert added.status_code == 201 and added["provider"]["id"] == PROVIDER_ROW_ID
+
+        replay = mgmt.add_terminal_provider(
+            TERMINAL_ID,
+            {
+                "vendorAccountId": VENDOR_ACCOUNT_ID,
+                "merchantCode": "1000000001",
+                "terminalCode": "2000000002",
+            },
+        )
+        assert UUID_V4.fullmatch(transport.last.header("Idempotency-Key"))
+        assert replay.replayed is True and replay.status_code == 200
+
+        updated = mgmt.update_terminal_provider(
+            PROVIDER_ROW_ID, row_version=1, label=None, status="DISABLED"
+        )
+        assert transport.last.method == "PATCH"
+        assert transport.last.path == f"{BASE}/terminal-providers/{PROVIDER_ROW_ID}"
+        assert json.loads(transport.last.body) == {
+            "rowVersion": 1,
+            "label": None,
+            "status": "DISABLED",
+        }
+        assert transport.last.header("Idempotency-Key") is None
+        assert updated["providerStatus"] == "DISABLED"
+
+    def test_iterate_terminal_providers_follows_the_cursor(self, client_factory):
+        first = {"hasMore": True, "nextCursor": "p1", "totalCount": None}
+        last = {"hasMore": False, "nextCursor": None, "totalCount": None}
+        transport, client = client_factory(
+            answer({"items": [PROVIDER], "pageInfo": first}, pageInfo=first),
+            answer({"items": [dict(PROVIDER, id="p2")], "pageInfo": last}, pageInfo=last),
+        )
+        mgmt = client.physical_pos_management()
+        ids = [row["id"] for row in mgmt.iterate_terminal_providers(TERMINAL_ID)]
+        assert ids == [PROVIDER_ROW_ID, "p2"]
+        assert query_of(transport.requests[-1]) == {"cursor": "p1"}
+
+
+POLICY = {
+    "scopeType": "ACCOUNT",
+    "storeId": None,
+    "deviceId": None,
+    "active": True,
+    "mode": "SCHEDULED",
+    "scheduleTime": "23:30",
+    "timeZone": "Europe/Istanbul",
+    "scheduleDays": [],
+    "retryWindowMinutes": 120,
+    "retryIntervalMinutes": 15,
+    "offlineBehavior": "RETRY_IN_WINDOW",
+    "overdueAlertHours": 26,
+    "rowVersion": 2,
+    "updatedAt": "2026-11-03T09:00:00.000Z",
+}
+
+
+class TestSettlementPolicy:
+    def test_policy_routes_for_every_level(self, client_factory):
+        effective = {
+            "deviceId": DEVICE_ID,
+            "sourceScopeType": "STORE",
+            "policy": dict(POLICY, scopeType="STORE", storeId=STORE_ID),
+            "serverSettlementSupported": True,
+            "deviceAutoSupported": False,
+            "nextScheduledAt": "2026-11-03T20:30:00.000Z",
+            "lastSettlementAt": None,
+            "overdue": False,
+            "scheduleWarning": None,
+        }
+        transport, client = client_factory(
+            *[answer({"policy": POLICY}) for _ in range(9)],
+            answer({"effective": effective}),
+        )
+        mgmt = client.physical_pos_management()
+        scheduled = {
+            "mode": "SCHEDULED",
+            "scheduleTime": "23:30",
+            "timeZone": "Europe/Istanbul",
+            "scheduleDays": ["MON", "FRI"],
+            "retryWindowMinutes": 120,
+            "retryIntervalMinutes": 15,
+            "offlineBehavior": "ALERT_IMMEDIATELY",
+            "overdueAlertHours": 26,
+            "expectedRowVersion": 1,
+        }
+
+        assert mgmt.get_account_settlement_policy()["mode"] == "SCHEDULED"
+        mgmt.set_account_settlement_policy(scheduled)
+        mgmt.clear_account_settlement_policy()
+        mgmt.get_store_settlement_policy(STORE_ID)
+        mgmt.set_store_settlement_policy(STORE_ID, mode="MANUAL")
+        mgmt.clear_store_settlement_policy(STORE_ID, expected_row_version=3)
+        mgmt.get_device_settlement_policy(DEVICE_ID)
+        mgmt.set_device_settlement_policy(DEVICE_ID, mode="DEVICE_AUTO", overdue_alert_hours=30)
+        cleared = mgmt.clear_device_settlement_policy(DEVICE_ID, expected_row_version=4)
+        assert cleared["rowVersion"] == 2
+        preview = mgmt.get_effective_settlement_policy(DEVICE_ID)
+        assert preview["sourceScopeType"] == "STORE"
+        assert preview["policy"]["storeId"] == STORE_ID
+
+        calls = transport.requests[1:]
+        assert [(call.method, call.path) for call in calls] == [
+            ("GET", f"{BASE}/settlement-policy"),
+            ("PUT", f"{BASE}/settlement-policy"),
+            ("DELETE", f"{BASE}/settlement-policy"),
+            ("GET", f"{BASE}/stores/{STORE_ID}/settlement-policy"),
+            ("PUT", f"{BASE}/stores/{STORE_ID}/settlement-policy"),
+            ("DELETE", f"{BASE}/stores/{STORE_ID}/settlement-policy?expectedRowVersion=3"),
+            ("GET", f"{BASE}/devices/{DEVICE_ID}/settlement-policy"),
+            ("PUT", f"{BASE}/devices/{DEVICE_ID}/settlement-policy"),
+            ("DELETE", f"{BASE}/devices/{DEVICE_ID}/settlement-policy?expectedRowVersion=4"),
+            ("GET", f"{BASE}/devices/{DEVICE_ID}/settlement-policy/effective"),
+        ]
+        assert json.loads(calls[1].body) == scheduled
+        assert json.loads(calls[4].body) == {"mode": "MANUAL"}
+        assert json.loads(calls[7].body) == {"mode": "DEVICE_AUTO", "overdueAlertHours": 30}
+        assert calls[2].body is None
+        assert all(call.header("Idempotency-Key") is None for call in calls)
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda m: m.set_account_settlement_policy({}),
+            lambda m: m.set_account_settlement_policy(mode="MANUAL", environment="LIVE"),
+            lambda m: m.set_store_settlement_policy(
+                STORE_ID, mode="SCHEDULED", retry_window_minutes="120"
+            ),
+            lambda m: m.set_device_settlement_policy(
+                DEVICE_ID, mode="SCHEDULED", schedule_days="MON"
+            ),
+            lambda m: m.set_device_settlement_policy(
+                DEVICE_ID, mode="MANUAL", expected_row_version=0
+            ),
+            lambda m: m.clear_account_settlement_policy(expected_row_version="2"),
+            lambda m: m.clear_store_settlement_policy(STORE_ID, expected_row_version=0),
+            lambda m: m.clear_device_settlement_policy("", expected_row_version=1),
+            lambda m: m.get_effective_settlement_policy(".."),
+            lambda m: m.add_terminal_provider(
+                TERMINAL_ID, vendor_account_id=VENDOR_ACCOUNT_ID, merchant_code="1"
+            ),
+            lambda m: m.add_terminal_provider(
+                TERMINAL_ID,
+                vendor_account_id=VENDOR_ACCOUNT_ID,
+                merchant_code="1",
+                terminal_code="2",
+                provider_code="METROPOL",
+            ),
+            lambda m: m.update_terminal_provider(PROVIDER_ROW_ID, label="x"),
+            lambda m: m.update_terminal_provider("", row_version=1),
+            lambda m: m.list_terminal_providers(TERMINAL_ID, status="ACTIVE"),
+        ],
+    )
+    def test_malformed_requests_are_refused_before_sending(self, client_factory, call):
+        transport, client = client_factory()
+        with pytest.raises(ConfigurationError):
+            call(client.physical_pos_management())
+        assert transport.requests == []

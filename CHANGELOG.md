@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 — 2026-11-03
+
+- Physical POS end-of-day webhooks: `PhysicalPosEvents.SETTLEMENT_COMPLETED`, `SETTLEMENT_FAILED`, `SETTLEMENT_OVERDUE`, `SETTLEMENT_SKIPPED` are in `PHYSICAL_POS_EVENT_TYPES`; `parse_webhook_event()` reads them with `category == "settlement"` (no `history_seq`; deduplicate by `id`). New helper `webhook_category()`.
+- Physical POS payment webhooks: `PhysicalPosWebhookEvent.cashier` is the optional `{"cashierId", "cashierCode"}` of a payment started from a device cashier session (`None` otherwise; the key is absent then). New helper `webhook_cashier()`.
+- Physical POS end-of-day on `client.physical_pos()`: `start_settlement(device_id, *, idempotency_key=None)` (`POST /devices/{deviceId}/settlement`, `physical_pos:payments`; empty JSON body, `Idempotency-Key` sent — generated when `None`; `PhysicalPosWriteResult` with `result["run"]`, 202 new / 200 replay), `list_settlement_runs()` / `iterate_settlement_runs()` (`GET /settlement-runs`; filters `device_id`, `source`, `run_status`, `created_from`, `created_to`, `include_total`) and `get_settlement_run(run_id)`.
+- Physical POS end-of-day policy on `client.physical_pos_management()`: `get_…`, `set_…` and `clear_…_settlement_policy()` for the account, a store and a device (`GET` / `PUT` / `DELETE …/settlement-policy`; `clear_…` takes an optional keyword `expected_row_version`, sent as a query parameter) and `get_effective_settlement_policy(device_id)`.
+- Physical POS terminal payment-provider rows on `client.physical_pos_management()`: `list_terminal_providers()` / `iterate_terminal_providers()`, `add_terminal_provider()` (`Idempotency-Key`; 201 / 200) and `update_terminal_provider()` (`PATCH /terminal-providers/{terminalProviderId}`).
+- `create_payment()` accepts `interaction` (`INSTRUMENT_READ` | `CODE_DISPLAY`) and `terminal_provider_id` for provider-collected cards such as `instrument="MEAL_CARD"`.
+
 ## 1.1.0 — 2026-11-03
 
 - Physical POS device identity on `client.physical_pos_management()`: `list_device_keys()` / `iterate_device_keys()` (`GET /devices/{deviceId}/keys`, `physical_pos:view`), `revoke_device_key()`, `revert_device_enrollment()` and `revoke_activation_code()` (`physical_pos:identity`; no `Idempotency-Key`). Key ids are `pdk_…`, not UUIDs. Activation codes are not issued with an API key (panel only).

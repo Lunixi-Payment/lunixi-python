@@ -3,7 +3,8 @@
 Contract source: nest-payment-gateway apps/api-gateway/src/physical-pos/
 payments/ (physical-pos-payments-api.controller.ts, dtos/physical-pos-payments.dto.ts,
 physical-pos-payments.service.ts, physical-pos-payments.mapper.ts) and
-transactions/ (physical-pos-transactions-api.controller.ts, dtos, mapper).
+transactions/ (physical-pos-transactions-api.controller.ts, dtos, mapper) and
+settlements/ (physical-pos-settlements-api.controller.ts, dtos, service, mapper).
 Ids and values below are synthetic.
 """
 
@@ -33,6 +34,8 @@ PAYMENT_ID = "0192f3a1-0000-7000-8000-000000000001"
 CHILD_ID = "0192f3a1-0000-7000-8000-000000000002"
 DEVICE_ID = "5f0c2b1e-1111-4222-8333-444455556666"
 KEY = "pos-test-key-0001"
+RUN_ID = "0192f3a1-0000-7000-8000-0000000000e1"
+TERMINAL_PROVIDER_ID = "0192f3a1-0000-7000-8000-0000000000f1"
 UUID_V4 = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 
 SALE = {
@@ -248,6 +251,46 @@ class TestCreatePayment:
         transport, client = client_factory()
         request = dict(SALE, items=[dict(SALE["items"][0], vatRateBp=1000)])
         with pytest.raises(ConfigurationError, match="vatRateBp"):
+            client.physical_pos().create_payment(request, idempotency_key=KEY)
+        assert transport.requests == []
+
+
+class TestMealCard:
+    def test_meal_card_payment_sends_interaction_and_provider_row(self, client_factory):
+        transport, client = client_factory(write_answer(instrument="MEAL_CARD"))
+        result = client.physical_pos().create_payment(
+            operation="SALE",
+            target={"device_id": DEVICE_ID},
+            amount_minor="4500",
+            currency="TRY",
+            instrument="MEAL_CARD",
+            interaction="CODE_DISPLAY",
+            terminal_provider_id=TERMINAL_PROVIDER_ID,
+            idempotency_key=KEY,
+        )
+        assert json.loads(transport.last.body) == {
+            "operation": "SALE",
+            "target": {"deviceId": DEVICE_ID},
+            "amountMinor": "4500",
+            "currency": "TRY",
+            "instrument": "MEAL_CARD",
+            "interaction": "CODE_DISPLAY",
+            "terminalProviderId": TERMINAL_PROVIDER_ID,
+        }
+        assert result.payment["instrument"] == "MEAL_CARD"
+
+    @pytest.mark.parametrize("extra", [{"interaction": 7}, {"provider_code": "METROPOL"}])
+    def test_bad_meal_card_fields_are_refused(self, client_factory, extra):
+        transport, client = client_factory()
+        request = dict(
+            operation="SALE",
+            target={"deviceId": DEVICE_ID},
+            amountMinor="4500",
+            currency="TRY",
+            instrument="MEAL_CARD",
+            **extra,
+        )
+        with pytest.raises(ConfigurationError):
             client.physical_pos().create_payment(request, idempotency_key=KEY)
         assert transport.requests == []
 
@@ -590,6 +633,114 @@ class TestReads:
     def test_there_is_no_resolve_method(self, client_factory):
         _, client = client_factory()
         assert not hasattr(client.physical_pos(), "resolve_payment")
+
+
+RUN = {
+    "runId": RUN_ID,
+    "deviceId": DEVICE_ID,
+    "environment": "LIVE",
+    "source": "MANUAL_API",
+    "runStatus": "PENDING",
+    "reason": None,
+    "businessDate": "2026-11-03",
+    "commandId": None,
+    "commandStatus": None,
+    "deliveryPath": None,
+    "resultState": None,
+    "attemptCount": 0,
+    "nextAttemptAt": None,
+    "windowEndsAt": None,
+    "resultLineCount": 0,
+    "completedAt": None,
+    "createdAt": "2026-11-03T18:00:00.000Z",
+    "updatedAt": "2026-11-03T18:00:00.000Z",
+}
+
+
+class TestSettlementRuns:
+    def test_start_settlement_posts_an_empty_body_with_the_key(self, client_factory):
+        transport, client = client_factory(
+            json_response(
+                envelope({"run": RUN, "replayed": False}, statusCode=202), status_code=202
+            ),
+            json_response({"status": "success", "data": {"run": RUN, "replayed": True}}),
+        )
+        pos = client.physical_pos()
+        started = pos.start_settlement(DEVICE_ID, idempotency_key=KEY)
+        assert transport.last.method == "POST"
+        assert transport.last.path == f"/api/v1/physical-pos/devices/{DEVICE_ID}/settlement"
+        assert transport.last.body == "{}"
+        assert transport.last.header("Idempotency-Key") == KEY
+        assert transport.last.header("X-Signature")
+        assert started.status_code == 202 and started.replayed is False
+        assert started["run"]["runId"] == RUN_ID
+        assert started.idempotency_key == KEY
+
+        again = pos.start_settlement(DEVICE_ID)
+        assert UUID_V4.fullmatch(transport.last.header("Idempotency-Key"))
+        assert again.idempotency_key == transport.last.header("Idempotency-Key")
+        assert again.status_code == 200 and again.replayed is True
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda pos: pos.start_settlement("", idempotency_key=KEY),
+            lambda pos: pos.start_settlement(DEVICE_ID, idempotency_key="short"),
+            lambda pos: pos.list_settlement_runs(line_status="MATCHED"),
+            lambda pos: pos.list_settlement_runs(include_total="yes"),
+            lambda pos: pos.get_settlement_run(".."),
+        ],
+    )
+    def test_bad_settlement_calls_are_refused_before_sending(self, client_factory, call):
+        transport, client = client_factory()
+        with pytest.raises(ConfigurationError):
+            call(client.physical_pos())
+        assert transport.requests == []
+
+    def test_a_test_key_refusal_keeps_the_key(self, client_factory):
+        _, client = client_factory(error_answer(403, "physical_pos.environment.test_key_read_only"))
+        with pytest.raises(ApiError) as caught:
+            client.physical_pos().start_settlement(DEVICE_ID, idempotency_key=KEY)
+        assert caught.value.code == "physical_pos.environment.test_key_read_only"
+
+    def test_runs_list_iterate_and_read(self, client_factory):
+        first = {"hasMore": True, "nextCursor": "r1", "totalCount": 2}
+        last = {"hasMore": False, "nextCursor": None, "totalCount": None}
+        transport, client = client_factory(
+            json_response(envelope({"items": [RUN], "pageInfo": first}, pageInfo=first)),
+            json_response(
+                envelope({"items": [dict(RUN, runId="r2")], "pageInfo": last}, pageInfo=last)
+            ),
+            json_response(envelope({"run": dict(RUN, runStatus="STARTED")})),
+        )
+        pos = client.physical_pos()
+        ids = [
+            run["runId"]
+            for run in pos.iterate_settlement_runs(
+                limit=10,
+                device_id=DEVICE_ID,
+                source="SCHEDULED",
+                run_status="FAILED",
+                created_from="2026-11-01T00:00:00.000Z",
+                include_total=True,
+            )
+        ]
+        assert ids == [RUN_ID, "r2"]
+        assert transport.requests[1].path.startswith("/api/v1/physical-pos/settlement-runs?")
+        assert query_of(transport.requests[1]) == {
+            "limit": "10",
+            "deviceId": DEVICE_ID,
+            "source": "SCHEDULED",
+            "runStatus": "FAILED",
+            "createdFrom": "2026-11-01T00:00:00.000Z",
+            "includeTotal": "true",
+        }
+        assert query_of(transport.requests[2])["cursor"] == "r1"
+
+        run = pos.get_settlement_run(RUN_ID)
+        assert transport.last.path == f"/api/v1/physical-pos/settlement-runs/{RUN_ID}"
+        assert transport.last.header("Idempotency-Key") is None
+        assert run["runStatus"] == "STARTED"
 
 
 @pytest.mark.parametrize(

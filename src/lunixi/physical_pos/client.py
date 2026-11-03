@@ -1,4 +1,4 @@
-"""Physical POS payments, transactions, reports and end-of-day results.
+"""Physical POS payments, transactions, reports, end-of-day runs and results.
 
 Every route is under ``/api/v1/physical-pos`` and every call is signed per
 request. The API key decides the environment; a TEST key reads only and is
@@ -16,6 +16,9 @@ refused on writes (``403 physical_pos.environment.test_key_read_only``).
 ``GET  /reports/sales-summary``                       :meth:`PhysicalPosClient.get_sales_summary`
 ``GET  /reports/tax-summary``                         :meth:`PhysicalPosClient.get_tax_summary`
 ``GET  /settlements``                                 :meth:`PhysicalPosClient.list_settlements`
+``POST /devices/{deviceId}/settlement``               :meth:`PhysicalPosClient.start_settlement`
+``GET  /settlement-runs``                             :meth:`PhysicalPosClient.list_settlement_runs`
+``GET  /settlement-runs/{runId}``                     :meth:`PhysicalPosClient.get_settlement_run`
 ===================================================  ==================================
 
 🔴 NO CARD DATA. The card is read on the device; a request never carries a
@@ -50,7 +53,7 @@ from ..errors import ConfigurationError
 from ..http.envelope import Page
 from ..webhook.verifier import WebhookVerifier
 from . import _support as s
-from .results import PhysicalPosPaymentWriteResult
+from .results import PhysicalPosPaymentWriteResult, PhysicalPosWriteResult
 from .webhook import PhysicalPosWebhookEvent, parse_webhook_event
 
 __all__ = ["PhysicalPosClient"]
@@ -88,6 +91,8 @@ _PAYMENT: s.Schema = {
     "startTimeoutSeconds": ("int", False, False),
     "terminalAcquirerId": ("str", False, False),
     "items": (("list", _SALE_ITEM), False, False),
+    "interaction": ("str", False, False),
+    "terminalProviderId": ("str", False, False),
 }
 _REVERSAL: s.Schema = {
     "operation": ("str", True, False),
@@ -137,6 +142,14 @@ class PhysicalPosClient:
         ``merchant_reference``, ``allow_duplicate_reference``,
         ``start_timeout_seconds``, ``terminal_acquirer_id``, ``items`` (SALE
         only; leave it out for a sale without items).
+
+        ``instrument`` is ``CARD`` by default; for a provider-collected card
+        such as ``MEAL_CARD`` send ``interaction`` (``INSTRUMENT_READ`` — the
+        device reads the card, ``CODE_DISPLAY`` — the device shows the
+        provider's QR / short code) and, when the terminal has several
+        provider rows, ``terminal_provider_id`` (a row id from
+        :meth:`~lunixi.physical_pos.management.PhysicalPosManagementClient.list_terminal_providers`).
+        Leave both out for ``CARD``.
 
         ``idempotency_key`` is REQUIRED (8–200 printable ASCII characters,
         sent exactly as given): create it with :meth:`new_idempotency_key`
@@ -291,6 +304,63 @@ class PhysicalPosClient:
 
     def iterate_settlements(self, **filters: Any) -> Iterator[Dict[str, Any]]:
         return self._iterate(self.list_settlements, filters)
+
+    def start_settlement(
+        self, device_id: str, *, idempotency_key: Optional[str] = None
+    ) -> PhysicalPosWriteResult:
+        """Starts end-of-day (batch close) on a device (``physical_pos:payments``).
+
+        End-of-day cannot be undone. The answer means "accepted": the device
+        reports the result later — follow it with :meth:`get_settlement_run`
+        or :meth:`list_settlements`. ``result["run"]`` is the run;
+        ``status_code`` is 202 for a new run and 200 (``replayed``) for the
+        same key again. A TEST key is refused with
+        ``403 physical_pos.environment.test_key_read_only``.
+
+        ``idempotency_key`` is sent as given; when it is ``None`` the SDK
+        creates one (returned in the result). After an unknown outcome call
+        again with the same key.
+        """
+        path = f"{s.BASE}/devices/{s.path_id(device_id, 'device_id')}/settlement"
+        sent_key = s.idempotency_key(idempotency_key)
+        response = s.call(
+            lambda: self._api.request("POST", path, {}, step_up=True, idempotency_key=sent_key),
+            sent_key,
+        )
+        payload = s.data(response)
+        replayed = payload.get("replayed") is True
+        return PhysicalPosWriteResult(
+            data=payload,
+            replayed=replayed,
+            status_code=s.status_code(response, 200 if replayed else 202),
+            idempotency_key=sent_key,
+        )
+
+    def list_settlement_runs(self, **filters: Any) -> Page:
+        """End-of-day runs started by Lunixi (manual and scheduled), newest first.
+
+        Filters: ``limit``, ``cursor``, ``include_total``, ``device_id``,
+        ``source`` (``MANUAL_API`` | ``MANUAL_PANEL`` | ``SCHEDULED``),
+        ``run_status`` (``PENDING`` | ``STARTED`` | ``SKIPPED`` | ``FAILED``),
+        ``created_from`` / ``created_to`` (run creation time).
+
+        Each run: ``runId``, ``deviceId``, ``environment``, ``source``,
+        ``runStatus``, ``reason``, ``businessDate``, ``commandId``,
+        ``commandStatus``, ``deliveryPath``, ``resultState``,
+        ``attemptCount``, ``nextAttemptAt``, ``windowEndsAt``,
+        ``resultLineCount``, ``completedAt``, ``createdAt``, ``updatedAt``.
+        """
+        return Page(
+            self._get(s.BASE + "/settlement-runs", s.query(filters, "list_settlement_runs"))
+        )
+
+    def iterate_settlement_runs(self, **filters: Any) -> Iterator[Dict[str, Any]]:
+        return self._iterate(self.list_settlement_runs, filters)
+
+    def get_settlement_run(self, run_id: str) -> Dict[str, Any]:
+        """One end-of-day run with its command status and result state."""
+        path = f"{s.BASE}/settlement-runs/{s.path_id(run_id, 'run_id')}"
+        return s.member(self._get(path), "run")
 
     # ── Webhooks ────────────────────────────────────────────────────────────
 

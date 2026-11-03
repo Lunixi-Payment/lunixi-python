@@ -46,6 +46,13 @@ class PhysicalPosEvents:
     ``deviceOccurredAt``; no ``approved`` event is sent for it. Its refund
     comes with the usual payment events (``original.origin`` =
     ``"DEVICE_DIRECT"``).
+
+    End-of-day events (``SETTLEMENT_*``) have their own payloads:
+    ``COMPLETED`` (the device's result with its bank lines; any source),
+    ``FAILED`` (a scheduled run could not finish in its window), ``OVERDUE``
+    (no result within the policy's threshold) and ``SKIPPED`` (a scheduled run
+    was skipped for a reason you can fix). They carry no ``historySeq``:
+    deduplicate them on the event id.
     """
 
     PAYMENT_APPROVED = "physical_pos.payment.approved"
@@ -66,6 +73,10 @@ class PhysicalPosEvents:
     FISCAL_DOCUMENT_FAILED = "physical_pos.fiscal_document.failed"
     FISCAL_DOCUMENT_CANCELLED = "physical_pos.fiscal_document.cancelled"
     FISCAL_DOCUMENT_ACTION_REQUIRED = "physical_pos.fiscal_document.action_required"
+    SETTLEMENT_COMPLETED = "physical_pos.settlement.completed"
+    SETTLEMENT_FAILED = "physical_pos.settlement.failed"
+    SETTLEMENT_OVERDUE = "physical_pos.settlement.overdue"
+    SETTLEMENT_SKIPPED = "physical_pos.settlement.skipped"
 
 
 #: Subscription pattern covering every physical POS event.
@@ -86,6 +97,10 @@ PHYSICAL_POS_EVENT_TYPES: Tuple[str, ...] = (
     PhysicalPosEvents.FISCAL_DOCUMENT_FAILED,
     PhysicalPosEvents.FISCAL_DOCUMENT_CANCELLED,
     PhysicalPosEvents.FISCAL_DOCUMENT_ACTION_REQUIRED,
+    PhysicalPosEvents.SETTLEMENT_COMPLETED,
+    PhysicalPosEvents.SETTLEMENT_FAILED,
+    PhysicalPosEvents.SETTLEMENT_OVERDUE,
+    PhysicalPosEvents.SETTLEMENT_SKIPPED,
 )
 
 
@@ -147,6 +162,8 @@ PAYMENT_FIELDS: Tuple[str, ...] = (
     "startTimeoutSeconds",
     "terminalAcquirerId",
     "items",
+    "interaction",
+    "terminalProviderId",
 )
 PAYMENT_TARGET_FIELDS: Tuple[str, ...] = ("deviceId", "vendorCode", "serialNumber", "externalRef")
 SALE_ITEM_FIELDS: Tuple[str, ...] = (
@@ -196,6 +213,8 @@ PHYSICAL_POS_FILTERS: Dict[str, Tuple[str, ...]] = {
     "get_sales_summary": _REPORT + ("groupBy",),
     "get_tax_summary": _REPORT,
     "list_settlements": _PAGE + ("deviceId", "lineStatus", "createdFrom", "createdTo"),
+    "list_settlement_runs": _ENTITY_PAGE
+    + ("deviceId", "source", "runStatus", "createdFrom", "createdTo"),
     "list_device_models": ("vendorCode", "deviceType", "status"),
     "list_stores": _ENTITY_PAGE + ("status", "q"),
     "list_store_audit": _PAGE,
@@ -203,6 +222,7 @@ PHYSICAL_POS_FILTERS: Dict[str, Tuple[str, ...]] = {
     "list_register_audit": _PAGE,
     "list_terminals": _ENTITY_PAGE + ("status", "q"),
     "list_terminal_acquirers": _ENTITY_PAGE,
+    "list_terminal_providers": _ENTITY_PAGE,
     "list_terminal_links": _PAGE,
     "list_terminal_audit": _PAGE,
     "list_devices": _ENTITY_PAGE

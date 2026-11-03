@@ -31,7 +31,7 @@ from lunixi.physical_pos import (
     is_card_data_key,
     management,
 )
-from lunixi.physical_pos.webhook import webhook_original
+from lunixi.physical_pos.webhook import webhook_cashier, webhook_category, webhook_original
 
 FIXTURE = json.loads(
     (pathlib.Path(__file__).parent / "fixtures" / "physical-pos-parity.json").read_text(
@@ -54,11 +54,13 @@ _ROUTES = {
     "get_sales_summary": "getSalesSummary",
     "get_tax_summary": "getTaxSummary",
     "list_settlements": "listSettlements",
+    "list_settlement_runs": "listSettlementRuns",
     "list_device_models": "listDeviceModels",
     "list_stores": "listStores",
     "list_registers": "listRegisters",
     "list_terminals": "listTerminals",
     "list_terminal_acquirers": "listTerminalAcquirers",
+    "list_terminal_providers": "listTerminalProviders",
     "list_devices": "listDevices",
     "list_store_audit": "history",
     "list_register_audit": "history",
@@ -146,6 +148,9 @@ def test_request_field_lists_match_the_gateway_dtos():
         "revokeDeviceKey": management._REVOKE_DEVICE_KEY,
         "revertDeviceEnrollment": management._REVERT_DEVICE_ENROLLMENT,
         "revokeActivationCode": management._REVOKE_ACTIVATION_CODE,
+        "addTerminalProvider": management._ADD_PROVIDER,
+        "updateTerminalProvider": management._UPDATE_PROVIDER,
+        "setSettlementPolicy": management._SETTLEMENT_POLICY,
     }
     for name, schema in schemas.items():
         assert sorted(schema) == sorted(fields[name]), name
@@ -164,6 +169,16 @@ def test_event_types_match():
 @pytest.mark.parametrize("case", FIXTURE["webhookOriginalCases"], ids=lambda case: case["name"])
 def test_webhook_original_cases(case):
     assert webhook_original(case["data"]) == case["original"]
+
+
+@pytest.mark.parametrize("case", FIXTURE["webhookCashierCases"], ids=lambda case: case["name"])
+def test_webhook_cashier_cases(case):
+    assert webhook_cashier(case["data"]) == case["cashier"]
+
+
+@pytest.mark.parametrize("case", FIXTURE["webhookCategoryCases"], ids=lambda case: case["type"])
+def test_webhook_category_cases(case):
+    assert webhook_category(case["type"]) == case["category"]
 
 
 def test_not_started_codes_match():

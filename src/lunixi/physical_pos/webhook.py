@@ -23,6 +23,9 @@ Deduplicate on :attr:`PhysicalPosWebhookEvent.id`, and ignore an event whose
 
 Amounts in webhook payloads are minor-unit STRINGS (``"4500"``); the HTTP API
 also returns canonical minor-unit strings.
+
+End-of-day events (``physical_pos.settlement.*``, category ``"settlement"``)
+carry their own payload and no ``historySeq``; deduplicate them on the id.
 """
 
 from __future__ import annotations
@@ -33,7 +36,13 @@ from typing import Any, Dict, Mapping, Optional
 from ..errors import ConfigurationError, WebhookVerificationError
 from ..webhook.verifier import WebhookVerifier
 
-__all__ = ["PhysicalPosWebhookEvent", "parse_webhook_event", "webhook_original"]
+__all__ = [
+    "PhysicalPosWebhookEvent",
+    "parse_webhook_event",
+    "webhook_cashier",
+    "webhook_category",
+    "webhook_original",
+]
 
 _PREFIX = "physical_pos."
 _DEVICE_SALE = "physical_pos.payment.device_sale"
@@ -44,14 +53,17 @@ class PhysicalPosWebhookEvent:
 
     Attributes:
         id: Event id — the same transition always carries the same id.
-        type: ``physical_pos.payment.*`` or ``physical_pos.fiscal_document.*``.
-        category: ``"payment"``, ``"fiscal_document"`` or ``"other"`` (a type
-            a later release may add).
+        type: ``physical_pos.payment.*``, ``physical_pos.fiscal_document.*``
+            or ``physical_pos.settlement.*``.
+        category: ``"payment"``, ``"fiscal_document"``, ``"settlement"`` or
+            ``"other"`` (a type a later release may add).
         environment: ``"LIVE"`` or ``"TEST"`` when present.
         created_at: When the transition happened (ISO-8601), when present.
         history_seq: The payment's / document's ``historySeq``, or ``None``.
         original: A reversal's original payment ``{"paymentId", "origin"}``
             (``origin``: ``"API"`` or ``"DEVICE_DIRECT"``), ``None`` on a root.
+        cashier: ``{"cashierId", "cashierCode"}`` for a payment started from
+            a device cashier session, ``None`` otherwise (the key is absent).
         is_device_sale: ``True`` for ``physical_pos.payment.device_sale`` (a
             sale made directly on the device; ``data`` also carries
             ``origin`` and ``deviceOccurredAt``).
@@ -67,6 +79,7 @@ class PhysicalPosWebhookEvent:
         "created_at",
         "history_seq",
         "original",
+        "cashier",
         "is_device_sale",
         "data",
         "raw",
@@ -91,6 +104,7 @@ class PhysicalPosWebhookEvent:
         self.created_at = created_at
         self.history_seq = history_seq
         self.original = webhook_original(data)
+        self.cashier = webhook_cashier(data)
         self.is_device_sale = type == _DEVICE_SALE
         self.data = data
         self.raw = raw
@@ -118,6 +132,34 @@ def webhook_original(data: Mapping[str, Any]) -> Optional[Dict[str, str]]:
     if payment_id is None or origin is None:
         return None
     return {"paymentId": payment_id, "origin": origin}
+
+
+def webhook_cashier(data: Mapping[str, Any]) -> Optional[Dict[str, str]]:
+    """The cashier of a payment payload.
+
+    ``{"cashierId": ..., "cashierCode": ...}`` when ``data["cashier"]``
+    carries both as non-empty strings (other keys are dropped); otherwise
+    ``None`` (no cashier session).
+    """
+    cashier = data.get("cashier") if isinstance(data, Mapping) else None
+    if not isinstance(cashier, Mapping):
+        return None
+    cashier_id = _text(cashier.get("cashierId"))
+    cashier_code = _text(cashier.get("cashierCode"))
+    if cashier_id is None or cashier_code is None:
+        return None
+    return {"cashierId": cashier_id, "cashierCode": cashier_code}
+
+
+def webhook_category(event_type: str) -> str:
+    """``"payment"``, ``"fiscal_document"``, ``"settlement"`` or ``"other"``."""
+    if event_type.startswith(_PREFIX + "payment."):
+        return "payment"
+    if event_type.startswith(_PREFIX + "fiscal_document."):
+        return "fiscal_document"
+    if event_type.startswith(_PREFIX + "settlement."):
+        return "settlement"
+    return "other"
 
 
 def _payload(envelope: Mapping[str, Any]) -> Dict[str, Any]:
@@ -176,12 +218,7 @@ def parse_webhook_event(
     from .money import validate_response_money
 
     validate_response_money(data)
-    if event_type.startswith(_PREFIX + "payment."):
-        category = "payment"
-    elif event_type.startswith(_PREFIX + "fiscal_document."):
-        category = "fiscal_document"
-    else:
-        category = "other"
+    category = webhook_category(event_type)
     seq = data.get("historySeq")
     return PhysicalPosWebhookEvent(
         id=_text(envelope.get("id")) or _text(envelope.get("eventId")) or verified.id,

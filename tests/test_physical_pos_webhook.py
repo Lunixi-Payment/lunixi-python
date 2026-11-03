@@ -79,8 +79,15 @@ def signed(body):
 
 def test_catalogue():
     assert PHYSICAL_POS_EVENT_PATTERN == "physical_pos.*"
-    assert len(PHYSICAL_POS_EVENT_TYPES) == 13
-    assert len(set(PHYSICAL_POS_EVENT_TYPES)) == 13
+    assert len(PHYSICAL_POS_EVENT_TYPES) == 17
+    assert len(set(PHYSICAL_POS_EVENT_TYPES)) == 17
+    assert PHYSICAL_POS_EVENT_TYPES[13:] == (
+        "physical_pos.settlement.completed",
+        "physical_pos.settlement.failed",
+        "physical_pos.settlement.overdue",
+        "physical_pos.settlement.skipped",
+    )
+    assert PhysicalPosEvents.SETTLEMENT_SKIPPED == "physical_pos.settlement.skipped"
     assert PhysicalPosEvents.PAYMENT_DEVICE_SALE == "physical_pos.payment.device_sale"
     assert PhysicalPosEvents.PAYMENT_DEVICE_SALE in PHYSICAL_POS_EVENT_TYPES
     assert all(t.startswith("physical_pos.") for t in PHYSICAL_POS_EVENT_TYPES)
@@ -104,6 +111,70 @@ def test_a_signed_event_is_verified_and_read():
     assert event.history_seq == 4
     assert event.data["amountMinor"] == "4500"
     assert "authCode" not in event.data
+    assert event.cashier is None
+
+
+def test_a_payment_event_from_a_cashier_session_carries_the_cashier():
+    payload = dict(PAYLOAD, cashier={"cashierId": "cashier_1", "cashierCode": "K01"})
+    raw, headers = signed(envelope(data=payload))
+    event = parse_webhook_event(raw, headers, SECRET)
+    assert event.cashier == {"cashierId": "cashier_1", "cashierCode": "K01"}
+
+
+def test_end_of_day_events_are_read_as_settlement():
+    totals = {
+        "saleCount": 42,
+        "saleMinor": "1284050",
+        "refundCount": 1,
+        "refundMinor": "15000",
+        "voidCount": 0,
+        "voidMinor": "0",
+    }
+    completed = {
+        "settlementId": "set_1",
+        "runId": "run_1",
+        "deviceId": "5f0c2b1e-1111-4222-8333-444455556666",
+        "source": "MANUAL_API",
+        "late": False,
+        "periodFrom": "2026-11-02T20:31:12.004Z",
+        "periodTo": "2026-11-03T20:15:40.220Z",
+        "deviceClosedAt": None,
+        "recordedAt": "2026-11-03T20:15:41.307Z",
+        "lineCount": 1,
+        "mismatchedLineCount": 0,
+        "unmappedLineCount": 0,
+        "lines": [
+            {
+                "lineNo": 1,
+                "acquirerCode": "BANK1",
+                "currency": "TRY",
+                "lineStatus": "MATCHED",
+                "reported": totals,
+                "system": totals,
+            }
+        ],
+    }
+    raw, headers = signed(envelope(type=PhysicalPosEvents.SETTLEMENT_COMPLETED, data=completed))
+    event = parse_webhook_event(raw, headers, SECRET)
+    assert event.category == "settlement"
+    assert event.history_seq is None
+    assert event.cashier is None
+    assert event.data["lines"][0]["reported"]["saleMinor"] == "1284050"
+
+    overdue = {
+        "deviceId": "5f0c2b1e-1111-4222-8333-444455556666",
+        "businessDate": "2026-11-03",
+        "thresholdHours": 26,
+        "settlementMode": "SCHEDULED",
+        "detectedAt": "2026-11-03T22:31:00.045Z",
+    }
+    body = {
+        k: v for k, v in envelope(type=PhysicalPosEvents.SETTLEMENT_OVERDUE).items() if k != "data"
+    }
+    raw, headers = signed({**body, "payloadJson": json.dumps(overdue)})
+    late = parse_webhook_event(raw, headers, SECRET)
+    assert late.category == "settlement"
+    assert late.data["thresholdHours"] == 26
 
 
 def test_a_device_sale_and_its_refund_are_read():

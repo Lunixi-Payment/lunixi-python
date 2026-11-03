@@ -1,4 +1,4 @@
-"""Physical POS management: overview, catalog, stores, registers, terminals, devices.
+"""Physical POS management: overview, catalog, stores, registers, terminals, devices, end-of-day policy.
 
 Reads need the ``physical_pos:view`` scope, writes ``physical_pos:manage``;
 the device identity writes (key revocation, enrollment revert,
@@ -83,6 +83,18 @@ _UPDATE_ACQUIRER: s.Schema = {
     "currencies": ("str_list", False, False),
     "status": ("str", False, False),
 }
+_ADD_PROVIDER: s.Schema = {
+    "vendorAccountId": ("str", True, False),
+    "merchantCode": ("str", True, False),
+    "terminalCode": ("str", True, False),
+    "productCode": ("str", False, False),
+    "label": ("str", False, False),
+}
+_UPDATE_PROVIDER: s.Schema = {
+    "rowVersion": ("row_version", True, False),
+    "label": ("str", False, True),
+    "status": ("str", False, False),
+}
 _CHANGE_TERMINAL_DEVICE: s.Schema = {
     "rowVersion": ("row_version", True, False),
     "deviceId": ("str", True, False),
@@ -125,6 +137,18 @@ _REVOKE_DEVICE_KEY: s.Schema = {
 }
 _REVERT_DEVICE_ENROLLMENT: s.Schema = {"reasonCode": ("str", True, False)}
 _REVOKE_ACTIVATION_CODE: s.Schema = {"reasonCode": ("str", True, False)}
+_SETTLEMENT_POLICY: s.Schema = {
+    "mode": ("str", True, False),
+    "scheduleTime": ("str", False, False),
+    "timeZone": ("str", False, False),
+    "scheduleDays": ("str_list", False, False),
+    "retryWindowMinutes": ("int", False, False),
+    "retryIntervalMinutes": ("int", False, False),
+    "offlineBehavior": ("str", False, False),
+    "overdueAlertHours": ("int", False, False),
+    "expectedRowVersion": ("row_version", False, False),
+}
+_CLEAR_SETTLEMENT_POLICY: s.Schema = {"expectedRowVersion": ("row_version", False, False)}
 
 
 class PhysicalPosManagementClient:
@@ -333,6 +357,49 @@ class PhysicalPosManagementClient:
             self._send("PATCH", path, _merge(request, fields), _UPDATE_ACQUIRER), "acquirer"
         )
 
+    def list_terminal_providers(self, terminal_id: str, **filters: Any) -> Page:
+        """The terminal's payment-provider rows (e.g. a meal card provider's merchant / terminal / product code).
+
+        Filters: ``limit``, ``cursor``, ``include_total``. Each row: ``id``
+        (what ``create_payment(terminal_provider_id=...)`` takes),
+        ``terminalId``, ``environment``, ``providerCode``,
+        ``vendorAccountId``, ``merchantCode``, ``terminalCode``,
+        ``productCode``, ``label``, ``providerStatus`` (``ACTIVE`` |
+        ``DISABLED``), ``rowVersion``, ``createdAt``, ``updatedAt``.
+        """
+        path = f"/terminals/{s.path_id(terminal_id, 'terminal_id')}/providers"
+        return Page(self._get(path, s.query(filters, "list_terminal_providers")))
+
+    def iterate_terminal_providers(
+        self, terminal_id: str, **filters: Any
+    ) -> Iterator[Dict[str, Any]]:
+        return PhysicalPosClient._iterate(
+            lambda **f: self.list_terminal_providers(terminal_id, **f), filters
+        )
+
+    def add_terminal_provider(
+        self,
+        terminal_id: str,
+        request: Optional[Mapping[str, Any]] = None,
+        *,
+        idempotency_key: Optional[str] = None,
+        **fields: Any,
+    ) -> PhysicalPosWriteResult:
+        """Adds a payment-provider row (keyed, 201): ``vendor_account_id``, ``merchant_code``,
+        ``terminal_code``, optional ``product_code`` (required by some providers), ``label``.
+        The provider comes from the vendor account. ``{provider, replayed}``."""
+        path = f"/terminals/{s.path_id(terminal_id, 'terminal_id')}/providers"
+        return self._keyed(path, _merge(request, fields), _ADD_PROVIDER, idempotency_key, 201)
+
+    def update_terminal_provider(
+        self, terminal_provider_id: str, request: Optional[Mapping[str, Any]] = None, **fields: Any
+    ) -> Dict[str, Any]:
+        """``row_version`` plus ``label`` (``None`` clears), ``status`` (``ACTIVE`` | ``DISABLED``)."""
+        path = f"/terminal-providers/{s.path_id(terminal_provider_id, 'terminal_provider_id')}"
+        return s.member(
+            self._send("PATCH", path, _merge(request, fields), _UPDATE_PROVIDER), "provider"
+        )
+
     def change_terminal_device(
         self, terminal_id: str, request: Optional[Mapping[str, Any]] = None, **fields: Any
     ) -> Dict[str, Any]:
@@ -534,7 +601,103 @@ class PhysicalPosManagementClient:
         path = f"/devices/{s.path_id(device_id, 'device_id')}/activation-code/revoke"
         return s.data(self._send("POST", path, _merge(request, fields), _REVOKE_ACTIVATION_CODE))
 
+    # ── End-of-day policy (account → store → device) ────────────────────────
+    #
+    # A level's policy replaces the level above it entirely. ``set_…`` sends
+    # the full setting: ``mode`` (``MANUAL`` | ``SCHEDULED`` | ``DEVICE_AUTO``),
+    # optional ``schedule_time`` (``HH:mm``, SCHEDULED only), ``time_zone``
+    # (IANA, default Europe/Istanbul), ``schedule_days`` (``MON`` … ``SUN``;
+    # empty = every day), ``retry_window_minutes``, ``retry_interval_minutes``,
+    # ``offline_behavior`` (``RETRY_IN_WINDOW`` | ``ALERT_IMMEDIATELY``),
+    # ``overdue_alert_hours``, ``expected_row_version``. ``clear_…`` resets the
+    # account to MANUAL or removes a store / device override.
+    # ``expected_row_version`` is the policy's ``rowVersion`` you read (409
+    # ``physical_pos.version_conflict`` when it changed); ``None`` = last write
+    # wins. Reads need ``physical_pos:view``, writes ``physical_pos:manage``.
+    # Every call returns the policy: ``scopeType``, ``storeId``, ``deviceId``,
+    # ``active`` (``False`` = no setting at this level), ``mode``,
+    # ``scheduleTime``, ``timeZone``, ``scheduleDays``, ``retryWindowMinutes``,
+    # ``retryIntervalMinutes``, ``offlineBehavior``, ``overdueAlertHours``,
+    # ``rowVersion``, ``updatedAt``.
+
+    def get_account_settlement_policy(self) -> Dict[str, Any]:
+        return s.member(self._get("/settlement-policy"), "policy")
+
+    def set_account_settlement_policy(
+        self, request: Optional[Mapping[str, Any]] = None, **fields: Any
+    ) -> Dict[str, Any]:
+        return self._put_policy("/settlement-policy", _merge(request, fields))
+
+    def clear_account_settlement_policy(
+        self, *, expected_row_version: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Resets the account level to the default (``MANUAL``)."""
+        return self._clear_policy("/settlement-policy", expected_row_version)
+
+    def get_store_settlement_policy(self, store_id: str) -> Dict[str, Any]:
+        return s.member(self._get(self._store_policy_path(store_id)), "policy")
+
+    def set_store_settlement_policy(
+        self, store_id: str, request: Optional[Mapping[str, Any]] = None, **fields: Any
+    ) -> Dict[str, Any]:
+        return self._put_policy(self._store_policy_path(store_id), _merge(request, fields))
+
+    def clear_store_settlement_policy(
+        self, store_id: str, *, expected_row_version: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Removes the store override (its devices inherit the account level)."""
+        return self._clear_policy(self._store_policy_path(store_id), expected_row_version)
+
+    def get_device_settlement_policy(self, device_id: str) -> Dict[str, Any]:
+        return s.member(self._get(self._device_policy_path(device_id)), "policy")
+
+    def set_device_settlement_policy(
+        self, device_id: str, request: Optional[Mapping[str, Any]] = None, **fields: Any
+    ) -> Dict[str, Any]:
+        """``DEVICE_AUTO`` only on devices that report their end-of-day results."""
+        return self._put_policy(self._device_policy_path(device_id), _merge(request, fields))
+
+    def clear_device_settlement_policy(
+        self, device_id: str, *, expected_row_version: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Removes the device override (it inherits its store / account policy)."""
+        return self._clear_policy(self._device_policy_path(device_id), expected_row_version)
+
+    def get_effective_settlement_policy(self, device_id: str) -> Dict[str, Any]:
+        """The policy a device follows: ``deviceId``, ``sourceScopeType``
+        (``ACCOUNT`` | ``STORE`` | ``DEVICE``), ``policy``,
+        ``serverSettlementSupported``, ``deviceAutoSupported``,
+        ``nextScheduledAt``, ``lastSettlementAt``, ``overdue``,
+        ``scheduleWarning``."""
+        path = f"{self._device_policy_path(device_id)}/effective"
+        return s.member(self._get(path), "effective")
+
     # ── Internals ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _store_policy_path(store_id: str) -> str:
+        return f"/stores/{s.path_id(store_id, 'store_id')}/settlement-policy"
+
+    @staticmethod
+    def _device_policy_path(device_id: str) -> str:
+        return f"/devices/{s.path_id(device_id, 'device_id')}/settlement-policy"
+
+    def _put_policy(self, path: str, request: Any) -> Dict[str, Any]:
+        return s.member(self._send("PUT", path, request, _SETTLEMENT_POLICY), "policy")
+
+    def _clear_policy(self, path: str, expected_row_version: Optional[int]) -> Dict[str, Any]:
+        """``DELETE …/settlement-policy``; ``expectedRowVersion`` in the query, left out when ``None``."""
+        query = s.shape(
+            {"expectedRowVersion": expected_row_version}, _CLEAR_SETTLEMENT_POLICY, "request"
+        )
+        return s.member(
+            s.call(
+                lambda: self._api.request(
+                    "DELETE", s.BASE + path, None, query=query or None, step_up=True
+                )
+            ),
+            "policy",
+        )
 
     @staticmethod
     def _key_path(device_id: str, key_id: str) -> str:
