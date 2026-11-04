@@ -31,7 +31,8 @@ client = LunixiClient(
 )
 intent = client.payments().create_intent(
     CreateIntent("1990", "TRY", "kalici-siparis-123",
-                 callback_url="https://magaza.example/return/123"),
+                 callback_url="https://magaza.example/return/123",
+                 enabled_installments=[1, 2, 3]),  # isteğe bağlı: en fazla 3 taksit
     idempotency_key=veritabaninda_saklanan_deneme_anahtari,
 )
 # Önce kullanıcı/sipariş sahipliği doğrulanmalıdır:
@@ -39,7 +40,7 @@ form_config = intent.browser_config()
 yonlendirme = intent.hosted_url
 ```
 
-Tutarlar kanonik küçük birim string değerleridir (`"1990"` = 19,90 TRY); sayısal JSON, float, bool, sıfır ve eski üst düzey tutar alanları ağdan önce reddedilir. `minor_units('19.90','TRY')` ondalık metni para biriminin basamak sayısıyla tam olarak dönüştürür; JPY 0, TRY 2, KWD 3 basamak kullanır. Fiat tutar üst sınırı `"9223372036854775807"` değeridir; sağlayıcı sınırı daha düşük olabilir. `preauth=True` yalnız ön provizyon açar; sipariş ödenmiş sayılmaz. Taksit, uygun yemek kartı/alışveriş kredisi, sigorta ve çoklu kart Lunixi panel/form ayarlarıyla yönetilir. Örnekler kart numarası/CVV toplamaz.
+Tutarlar kanonik küçük birim string değerleridir (`"1990"` = 19,90 TRY); sayısal JSON, float, bool, sıfır ve eski üst düzey tutar alanları ağdan önce reddedilir. `minor_units('19.90','TRY')` ondalık metni para biriminin basamak sayısıyla tam olarak dönüştürür; JPY 0, TRY 2, KWD 3 basamak kullanır. Fiat tutar üst sınırı `"9223372036854775807"` değeridir; sağlayıcı sınırı daha düşük olabilir. `preauth=True` yalnız ön provizyon açar; sipariş ödenmiş sayılmaz. Taksit, uygun yemek kartı/alışveriş kredisi, sigorta ve çoklu kart Lunixi panel/form ayarlarıyla yönetilir. `enabled_installments` bir ödeme için formun sunacağı taksit sayılarını yalnızca daraltır (`[1]` = yalnız tek çekim); form, panel ayarlarınızın, kartın ve platform üst sınırının da izin verdiği sayıları gösterir, `None` kısıt yok demektir. Sayılar 1–36 arası tamsayı, tekrarsız olmalı ve 1'i içermelidir; aksi hâlde istekten önce `ConfigurationError` oluşur. Liste `enabledInstallments` olarak artan sırada gönderilir. Örnekler kart numarası/CVV toplamaz.
 
 `payments()` yardımcıları: `create_intent`, `get`, `list`, `capture`, `refund`, `void`, `methods`, `get_split`, `list_splits`, `refund_split`. Finansal işlemler kalıcı `idempotency_key` ister. Intent dışındaki yanıtlar tüm gateway zarfını korur; `details`, `pageInfo`, request ID kaybolmaz. API'de intent yanıtı `paymentId`/`token`, ödeme sorgusu `data.id`, webhook `data.intentId` kullanır. Yalnız HTTP 2xx finansal kesinlik değildir.
 

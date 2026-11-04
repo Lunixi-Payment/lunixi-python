@@ -51,7 +51,8 @@ client = LunixiClient(
 )
 intent = client.payments().create_intent(
     CreateIntent("1990", "TRY", "persisted-order-123",
-                 callback_url="https://shop.example/return/123"),
+                 callback_url="https://shop.example/return/123",
+                 enabled_installments=[1, 2, 3]),  # optional: at most 3 installments
     idempotency_key=persisted_attempt_key,
 )
 # Return only after authenticating ownership of the persisted order:
@@ -60,7 +61,7 @@ public_form_configuration = intent.browser_config()
 hosted_url = intent.hosted_url
 ```
 
-Money is canonical minor-unit strings, from 1 to 9,223,372,036,854,775,807; booleans, floats, zero and removed root amount fields fail before token exchange/network. `minor_units('19.90','TRY')` converts a plain decimal string exactly; JPY has0 decimals and KWD 3. Preauthorization is a JSON boolean; an authorization is on hold, not paid. Available methods, installments, eligible shopping credit/meal cards, insurance and multi-card options belong to the Lunixi form/panel. The examples never collect card numbers/CVV.
+Money is canonical minor-unit strings, from 1 to 9,223,372,036,854,775,807; booleans, floats, zero and removed root amount fields fail before token exchange/network. `minor_units('19.90','TRY')` converts a plain decimal string exactly; JPY has0 decimals and KWD 3. Preauthorization is a JSON boolean; an authorization is on hold, not paid. Available methods, installments, eligible shopping credit/meal cards, insurance and multi-card options belong to the Lunixi form/panel. `enabled_installments` only narrows the installment counts the form offers for one payment (`[1]` = single payment only); the form shows only the counts your panel settings, the card and the platform maximum also allow, and `None` means no restriction. Counts are integers 1–36, distinct and include 1, otherwise `ConfigurationError` is raised before any request; the list is sent as `enabledInstallments` in ascending order. The examples never collect card numbers/CVV.
 
 | Helper | Merchant API |
 |---|---|

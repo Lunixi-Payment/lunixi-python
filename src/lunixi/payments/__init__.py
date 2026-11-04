@@ -33,8 +33,55 @@ def validate_amount_body(body: Mapping[str, Any]) -> None:
     amount_minor(body.get("amount"))
 
 
+ENABLED_INSTALLMENTS_MIN = 1
+ENABLED_INSTALLMENTS_MAX = 36
+
+
+def validate_enabled_installments(
+    counts: Any, field_name: str = "enabled_installments"
+) -> list[int]:
+    """Checks an installment-count list and returns it in ascending order.
+
+    A non-empty list of distinct integers from 1 to 36 that contains 1. ``None``
+    (leaving the field out) means no restriction, so an empty list is refused.
+    A duplicate is an error; it is not removed.
+    """
+    if not isinstance(counts, (list, tuple)) or len(counts) == 0:
+        raise ConfigurationError(
+            f"{field_name} must be a non-empty list of installment counts; "
+            "use None for no restriction or [1] for a single payment only."
+        )
+    seen: set[int] = set()
+    for count in counts:
+        if (
+            isinstance(count, bool)
+            or not isinstance(count, int)
+            or not ENABLED_INSTALLMENTS_MIN <= count <= ENABLED_INSTALLMENTS_MAX
+        ):
+            raise ConfigurationError(
+                f"{field_name} values must be integers from "
+                f"{ENABLED_INSTALLMENTS_MIN} to {ENABLED_INSTALLMENTS_MAX}; got {count!r}."
+            )
+        if count in seen:
+            raise ConfigurationError(f"{field_name} has {count} more than once.")
+        seen.add(count)
+    if ENABLED_INSTALLMENTS_MIN not in seen:
+        raise ConfigurationError(f"{field_name} must contain 1 (single payment).")
+    return sorted(seen)
+
+
 @dataclass(frozen=True)
 class CreateIntent:
+    """Body of ``POST /api/v1/payments/intents``.
+
+    ``enabled_installments`` lists the installment counts the hosted form may
+    offer for this payment, e.g. ``[1, 2, 3]``; ``[1]`` allows a single payment
+    only. The form shows only the counts also allowed by your panel settings,
+    the card and the platform maximum. ``None`` means no restriction. Integers
+    1–36, no duplicates, 1 included; sent as ``enabledInstallments`` in
+    ascending order.
+    """
+
     amount: str
     currency: str
     order_id: str
@@ -42,6 +89,7 @@ class CreateIntent:
     preauth: bool = False
     locale: str = "en"
     metadata: Mapping[str, Any] = field(default_factory=dict, repr=False)
+    enabled_installments: Optional[list[int]] = None
 
     def to_dict(self) -> dict[str, Any]:
         amount_minor(self.amount)
@@ -74,6 +122,8 @@ class CreateIntent:
             ):
                 raise ConfigurationError("callback_url must be a trusted HTTPS URL.")
             body["callbackUrl"] = self.callback_url
+        if self.enabled_installments is not None:
+            body["enabledInstallments"] = validate_enabled_installments(self.enabled_installments)
         return body
 
 
