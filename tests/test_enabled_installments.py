@@ -30,7 +30,19 @@ def test_bounds_are_accepted():
 
 @pytest.mark.parametrize(
     "counts",
-    [[], [2, 3], [1, 2, 2], [0, 1], [1, -3], [1, 37], [1, 2.0], [1, "3"], [1, None], [True, 2], "1,2,3"],
+    [
+        [],
+        [2, 3],
+        [1, 2, 2],
+        [0, 1],
+        [1, -3],
+        [1, 37],
+        [1, 2.0],
+        [1, "3"],
+        [1, None],
+        [True, 2],
+        "1,2,3",
+    ],
 )
 def test_broken_lists_are_refused(counts):
     with pytest.raises(ConfigurationError):

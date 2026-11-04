@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 — 2026-11-04
+
+- Packaging-only release of 1.3.0 (test formatting). No API change.
+
 ## 1.3.0 — 2026-11-04
 
 - `CreateIntent(enabled_installments=[...])` sends `enabledInstallments`: the installment counts the hosted form may offer for one payment (`[1]` = single payment only). It only narrows your panel settings, the card and the platform maximum; `None` means no restriction. The list is checked before any request (integers 1–36, no duplicates, 1 included; `ConfigurationError` otherwise) and sent in ascending order. Helper: `lunixi.payments.validate_enabled_installments()`.
