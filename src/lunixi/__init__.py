@@ -66,7 +66,7 @@ from .fraud.taxonomy import (
 )
 from .http.envelope import Page, data_of, is_success, items_of, page_info_of
 from .http.transport import HttpResponse, HttpTransport, TransportError, UrllibTransport
-from .payments import CreateIntent, IntentResult, PaymentsClient
+from .payments import CreateIntent, IntentResult, PaymentsClient, ProductCategory
 from .physical_pos import (
     PHYSICAL_POS_EVENT_PATTERN,
     PHYSICAL_POS_EVENT_TYPES,
@@ -87,6 +87,7 @@ __all__ = [
     "CreateIntent",
     "IntentResult",
     "PaymentsClient",
+    "ProductCategory",
     "PhysicalPosClient",
     "PhysicalPosManagementClient",
     "PhysicalPosPaymentWriteResult",

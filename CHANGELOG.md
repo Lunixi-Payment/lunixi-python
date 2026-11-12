@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0 — 2026-11-12
+
+- `lunixi.ProductCategory` (also `lunixi.payments.ProductCategory`): the 40 Lunixi product category codes for the optional `basketItems[].productCategory` field as string constants (e.g. `ProductCategory.MOBILE_PHONE`) and the `ProductCategory.ALL` tuple in dictionary order. Used by payment methods with legal installment limits (e.g. shopping loan) and other platform features; the gateway answers an unknown code with 400. The list only grows by appending; values are not checked against it before sending. `CreateIntent` is unchanged (it does not build basket items).
+
 ## 1.3.1 — 2026-11-04
 
 - Packaging-only release of 1.3.0 (test formatting). No API change.

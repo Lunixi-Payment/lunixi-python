@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 from ..api_client import ApiClient
 from ..errors import ApiError, ConfigurationError
 from ..validation import amount_minor, currency_code, header_value, identifier
+from .product_category import ProductCategory as ProductCategory
 
 _BASE = "/api/v1/payments"
 
