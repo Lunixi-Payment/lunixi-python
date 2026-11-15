@@ -353,9 +353,7 @@ def _charge_body(request: Any, sellers: Sellers, multi_seller_policy: str) -> Di
     return _split_body(body, sellers, multi_seller_policy)
 
 
-def _split_body(
-    body: Dict[str, Any], sellers: Sellers, multi_seller_policy: str
-) -> Dict[str, Any]:
+def _split_body(body: Dict[str, Any], sellers: Sellers, multi_seller_policy: str) -> Dict[str, Any]:
     """Adds the seller legs and the policy; the legs must add up to ``amount``."""
     if "sellers" in body or "multiSellerPolicy" in body:
         raise ConfigurationError(
@@ -401,4 +399,3 @@ def _assert_charge_amount(body: Mapping[str, Any]) -> None:
     if "preauth" in body and not isinstance(body["preauth"], bool):
         raise ConfigurationError("preauth must be a boolean.")
     validate_money_fields(dict(body))
-

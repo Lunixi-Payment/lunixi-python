@@ -234,11 +234,7 @@ def _is_scalar(value: Any) -> bool:
 
 
 def _require_key(key: Any, path: str) -> None:
-    if (
-        not isinstance(key, str)
-        or _FIELD_KEY.fullmatch(key) is None
-        or key in _RESERVED_FIELD_KEYS
-    ):
+    if not isinstance(key, str) or _FIELD_KEY.fullmatch(key) is None or key in _RESERVED_FIELD_KEYS:
         raise ConfigurationError(
             f"{path} has an invalid field name {key!r}: field names start with a letter "
             "and contain only letters and digits."

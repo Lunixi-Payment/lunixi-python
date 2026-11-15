@@ -15,7 +15,7 @@ build-backend = "setuptools.build_meta"
 # ─────────────────────────────────────────────────────────────────────────────
 [project]
 name = "lunixi-sdk"
-version = "1.5.0"
+version = "1.5.1"
 description = "Lunixi payment and fraud SDK with Ed25519 authentication, verified webhooks and durable native checkout orchestration."
 readme = "README.md"
 requires-python = ">=3.9"

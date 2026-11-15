@@ -281,9 +281,7 @@ KYC_ROUTES = freeze_routes(
         "rotateWebhookSecret": _route(
             "POST", f"{_KYC}/admin/merchant-policy/webhook-secret/rotate"
         ),
-        "webhookOutbox": _route(
-            "GET", f"{_KYC}/admin/webhook-outbox", query=["limit", "status"]
-        ),
+        "webhookOutbox": _route("GET", f"{_KYC}/admin/webhook-outbox", query=["limit", "status"]),
         "retryWebhookEvent": _route("POST", f"{_KYC}/admin/webhook-outbox/:eventId/retry"),
         "erasureRequests": _route(
             "GET", f"{_KYC}/admin/erasure-requests", query=["limit", "status"]

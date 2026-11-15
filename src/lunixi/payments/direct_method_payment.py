@@ -371,4 +371,3 @@ def assert_direct_method_payment_payload(payload: Any) -> None:
     installment = payload.get("installment")
     if installment is not None:
         _installment(installment)
-

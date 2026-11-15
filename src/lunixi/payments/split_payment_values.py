@@ -243,7 +243,7 @@ def _assert_card_leg(leg: Mapping[str, Any], path: str) -> None:
     quote = leg.get("installmentQuoteToken")
     if _given(quote):
         _bounded_text(quote, f"{path}.installmentQuoteToken", _QUOTE_TOKEN_MAX_LENGTH)
-    if _given(installment) and installment >= 2 and not _given(quote):
+    if isinstance(installment, int) and installment >= 2 and not _given(quote):
         raise ConfigurationError(
             f"{path}: an installment of 2 or more needs installmentQuoteToken "
             "(POST /bin/installments with this leg's amount)."
@@ -332,7 +332,7 @@ def assert_split_payment_payload(body: Any) -> None:
     callback_url = body.get("callbackUrl")
     if _given(callback_url):
         _bounded_text(callback_url, "callbackUrl", _CALLBACK_URL_MAX_LENGTH)
-        if re.match(r"https?://", callback_url, re.IGNORECASE) is None:
+        if re.match(r"https?://", str(callback_url), re.IGNORECASE) is None:
             raise ConfigurationError(f"callbackUrl must be an http(s) URL; got {callback_url!r}.")
     legs = body.get("legs")
     if not isinstance(legs, (list, tuple)) or not SPLIT_MIN_LEGS <= len(legs) <= SPLIT_MAX_LEGS:

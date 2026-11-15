@@ -77,9 +77,7 @@ def test_charges_are_signed_and_dealer_routes_bearer_only(client_factory):
             assert route["path"].startswith("/api/v1/marketplace/"), name
 
 
-def test_create_checkout_intent_sends_the_split_signed_with_the_key(
-    client_factory, test_key_pair
-):
+def test_create_checkout_intent_sends_the_split_signed_with_the_key(client_factory, test_key_pair):
     _, public_key = test_key_pair
     answer = ok({"paymentId": "pi_1", "token": "tok_1", "checkoutFormContent": "<script>"})
     transport, client = client_factory(answer)
@@ -263,9 +261,7 @@ def test_payouts_commissions_and_the_audit_log(client_factory):
     transport, client = client_factory(*(ok({"items": []}) for _ in range(5)))
     marketplace = client.marketplace()
     marketplace.create_payout(sub_dealer_id="d_1", amount_minor="5000", currency="TRY")
-    marketplace.resolve_commission(
-        "d_1", category_code="ELECTRONICS", mtd_volume_minor="100000"
-    )
+    marketplace.resolve_commission("d_1", category_code="ELECTRONICS", mtd_volume_minor="100000")
     marketplace.bulk_mark_payouts_paid(["po_1", "po_2"], reference="R-1")
     marketplace.audit_log(limit=20)
     marketplace.verify_audit_log()

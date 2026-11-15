@@ -309,7 +309,7 @@ def _transfer_query(filters: Mapping[str, Any], route_name: str) -> Dict[str, An
                     raise ConfigurationError(
                         f"'status' must be one of {', '.join(allowed_status)}."
                     )
-            query[key] = ",".join(values)
+            query[key] = ",".join(str(entry) for entry in values)
         elif key == "accountId":
             query[key] = text(value, "accountId")
         else:

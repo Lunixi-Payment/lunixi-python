@@ -100,18 +100,14 @@ MARKETPLACE_ROUTES = freeze_routes(
             "GET", f"{_MP}/dealers", query=["status", "search", "limit", "offset"]
         ),
         "getDealer": _route("GET", f"{_MP}/dealers/:dealerId"),
-        "updateDealerStatus": _route(
-            "PUT", f"{_MP}/dealers/:dealerId/status", required=["status"]
-        ),
+        "updateDealerStatus": _route("PUT", f"{_MP}/dealers/:dealerId/status", required=["status"]),
         "onboardingToken": _route("POST", f"{_MP}/dealers/:dealerId/onboarding-token"),
         "dealerApplication": _route("GET", f"{_MP}/dealers/:dealerId/application"),
         "submitDealerApplication": _route("POST", f"{_MP}/dealers/:dealerId/submit", free=True),
         "setDealerTerms": _route("POST", f"{_MP}/dealers/:dealerId/terms", free=True),
         "signDealerContract": _route("POST", f"{_MP}/dealers/:dealerId/sign", free=True),
         "activateDealer": _route("POST", f"{_MP}/dealers/:dealerId/activate"),
-        "recordDealerKycResult": _route(
-            "POST", f"{_MP}/dealers/:dealerId/kyc-result", free=True
-        ),
+        "recordDealerKycResult": _route("POST", f"{_MP}/dealers/:dealerId/kyc-result", free=True),
         "payoutLedger": _route(
             "GET", f"{_MP}/payout-ledger", query=["status", "subDealerId", "days", "limit"]
         ),

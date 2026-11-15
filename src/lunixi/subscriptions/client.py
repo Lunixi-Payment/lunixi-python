@@ -98,7 +98,7 @@ def _subscription_page(response: Any) -> SubscriptionPage:
     page = cast(SubscriptionPage, route_page(response, SubscriptionPage))
     size = response.get("pageSize") if isinstance(response, Mapping) else None
     counted = isinstance(size, int) and not isinstance(size, bool)
-    page.page_size = size if counted else len(page.items)
+    page.page_size = cast(int, size) if counted else len(page.items)
     return page
 
 
@@ -251,9 +251,7 @@ class SubscriptionPlans(_Section):
             body["dunningScheduleDays"] = _integer_list(
                 body["dunningScheduleDays"], "dunningScheduleDays", 0
             )
-        return data_of(
-            _call(self._api, "plans.create", body=body, idempotency_key=idempotency_key)
-        )
+        return data_of(_call(self._api, "plans.create", body=body, idempotency_key=idempotency_key))
 
     def get(self, plan_id: str) -> Any:
         return data_of(_call(self._api, "plans.get", params={"planId": plan_id}))

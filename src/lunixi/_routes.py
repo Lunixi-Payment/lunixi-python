@@ -473,8 +473,8 @@ def route_page(response: Any, page_class: type = Page) -> Page:
         container.get("totalCount"),
         container.get("total"),
     )
-    numbers = [value for value in totals if isinstance(value, (int, float))]
-    total = next((value for value in numbers if not isinstance(value, bool)), None)
+    numbers = [value for value in totals if isinstance(value, int) and not isinstance(value, bool)]
+    total = next(iter(numbers), None)
     has_more = page_info.get("hasMore") if page_info is not None else None
     page: Page = page_class(root)
     page.items = [row for row in rows if isinstance(row, Mapping)]

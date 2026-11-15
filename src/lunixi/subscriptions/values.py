@@ -381,9 +381,7 @@ SUBSCRIPTION_ROUTES = freeze_routes(
         "portal.getSettings": _route("GET", f"{_PORTAL_PANEL}/settings"),
         "portal.updateSettings": _route("PUT", f"{_PORTAL_PANEL}/settings", free=True),
         "products.create": _route("POST", f"{_SUBS}/products", free=True),
-        "products.list": _route(
-            "GET", f"{_SUBS}/products", query=["limit", "cursor", "active"]
-        ),
+        "products.list": _route("GET", f"{_SUBS}/products", query=["limit", "cursor", "active"]),
         "products.get": _route("GET", f"{_SUBS}/products/:productId"),
         "products.update": _route("PATCH", f"{_SUBS}/products/:productId", free=True),
         "products.archive": _route("DELETE", f"{_SUBS}/products/:productId"),

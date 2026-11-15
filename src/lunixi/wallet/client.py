@@ -699,7 +699,7 @@ def require_amount(label: str, value: Any) -> str:
     """Minor units only, as a canonical digit string; a number or a decimal is refused."""
     if not isinstance(value, str) or not _AMOUNT.match(value):
         raise ConfigurationError(
-            f"{label} must be minor units as a digit string (e.g. \"12550\" for 125.50)."
+            f'{label} must be minor units as a digit string (e.g. "12550" for 125.50).'
         )
     return amount_minor(value)
 

@@ -57,6 +57,8 @@ class BinaryResponse:
 
     content_type: Optional[str]
     content: bytes = field(repr=False)
+
+
 _MAX_BACKOFF_SECONDS = 2.0
 _QUOTA_HEADERS = {
     "rate_limit": "x-ratelimit-limit",

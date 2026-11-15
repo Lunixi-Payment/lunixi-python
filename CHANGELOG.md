@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1 — 2026-11-15
+
+- Formatting (`ruff format`) and type annotations (`mypy`) of the 1.5.0 sources; no behaviour change.
+
 ## 1.5.0 — 2026-11-15
 
 - Payment method constants: `PaymentMethod` (15 codes, `QR` accepted as `QR_CODE`), `PaymentActionType`, `ProviderSelection`, `ProviderSelectionMode`, `MethodInputFieldType`, and the field lists `DIRECT_METHOD_PAYMENT_FIELDS`, `METHOD_BLOCK_FIELDS`, `CARD_ONLY_FIELDS`, `PAYMENT_ACTION_CONFIRM_FIELDS`, `SHOPPING_LOAN_MAX_BASKET_ITEMS` (100); helpers `normalize_payment_method()` and `block_name_of()`.
