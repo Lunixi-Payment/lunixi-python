@@ -1,0 +1,72 @@
+"""Wallet: end users, wallets, transfers, withdrawals, top-ups, payments, QR codes and bulk payouts.
+
+Reach it as ``client.wallet()``; see :class:`~lunixi.wallet.client.WalletClient`.
+Routes, fields and the ``Idempotency-Key`` rule come from one table,
+:data:`~lunixi.wallet.values.WALLET_ROUTES`.
+"""
+
+from .client import (
+    WalletAccounts,
+    WalletBulkPayouts,
+    WalletClient,
+    WalletCorporate,
+    WalletDeposits,
+    WalletEndUsers,
+    WalletFees,
+    WalletOperations,
+    WalletPayments,
+    WalletPrograms,
+    WalletQr,
+    WalletTopups,
+    WalletTransfers,
+    WalletWithdrawals,
+)
+from .values import (
+    AMOUNT_PATTERN,
+    WALLET_AMOUNT_FIELDS,
+    WALLET_IDEMPOTENCY_KEY_MAX,
+    WALLET_NESTED_FIELDS,
+    WALLET_QR_SCALE_MAX,
+    WALLET_QR_SCALE_MIN,
+    WALLET_ROUTES,
+    WalletAccountType,
+    WalletBulkTargetType,
+    WalletCorporateAccountStatus,
+    WalletEndUserStatus,
+    WalletKycLevel,
+    WalletOtpChannel,
+    WalletQrImageFormat,
+    WalletQrType,
+)
+
+__all__ = [
+    "WalletClient",
+    "WalletPrograms",
+    "WalletEndUsers",
+    "WalletAccounts",
+    "WalletDeposits",
+    "WalletCorporate",
+    "WalletFees",
+    "WalletTransfers",
+    "WalletWithdrawals",
+    "WalletOperations",
+    "WalletTopups",
+    "WalletPayments",
+    "WalletQr",
+    "WalletBulkPayouts",
+    "WalletAccountType",
+    "WalletEndUserStatus",
+    "WalletKycLevel",
+    "WalletOtpChannel",
+    "WalletQrType",
+    "WalletQrImageFormat",
+    "WalletBulkTargetType",
+    "WalletCorporateAccountStatus",
+    "WALLET_ROUTES",
+    "WALLET_AMOUNT_FIELDS",
+    "WALLET_NESTED_FIELDS",
+    "WALLET_IDEMPOTENCY_KEY_MAX",
+    "WALLET_QR_SCALE_MIN",
+    "WALLET_QR_SCALE_MAX",
+    "AMOUNT_PATTERN",
+]

@@ -1,0 +1,70 @@
+"""Subscriptions: plans, customers, saved cards, invoices, the customer portal, catalog,
+features, add-ons and metered usage.
+
+Reach it as ``client.subscriptions()``; see
+:class:`~lunixi.subscriptions.client.SubscriptionsClient`.
+"""
+
+from .client import (
+    SubscriptionAddons,
+    SubscriptionCards,
+    SubscriptionCustomers,
+    SubscriptionFeatures,
+    SubscriptionInvoices,
+    SubscriptionPage,
+    SubscriptionPlans,
+    SubscriptionPortal,
+    SubscriptionProducts,
+    SubscriptionsClient,
+    SubscriptionUsage,
+)
+from .values import (
+    SUBSCRIPTION_ACTIVE_STATES,
+    SUBSCRIPTION_BILLING_RULE_FIELDS,
+    SUBSCRIPTION_EVENT_TYPES,
+    SUBSCRIPTION_PORTAL_HOSTED_BASE,
+    SUBSCRIPTION_ROUTES,
+    SUBSCRIPTION_TERMINAL_STATES,
+    SubscriptionBillingFrequency,
+    SubscriptionCardVerificationMode,
+    SubscriptionCollectionMethod,
+    SubscriptionEvents,
+    SubscriptionInvoiceStatus,
+    SubscriptionPlanChangeBehavior,
+    SubscriptionPortalSdkMode,
+    SubscriptionStatus,
+    is_subscription_active,
+    is_subscription_terminal,
+    subscription_portal_url,
+)
+
+__all__ = [
+    "SubscriptionsClient",
+    "SubscriptionPage",
+    "SubscriptionPlans",
+    "SubscriptionCustomers",
+    "SubscriptionCards",
+    "SubscriptionInvoices",
+    "SubscriptionPortal",
+    "SubscriptionProducts",
+    "SubscriptionFeatures",
+    "SubscriptionAddons",
+    "SubscriptionUsage",
+    "SubscriptionStatus",
+    "SUBSCRIPTION_ACTIVE_STATES",
+    "SUBSCRIPTION_TERMINAL_STATES",
+    "SubscriptionInvoiceStatus",
+    "SubscriptionCollectionMethod",
+    "SubscriptionBillingFrequency",
+    "SubscriptionCardVerificationMode",
+    "SubscriptionPlanChangeBehavior",
+    "SubscriptionPortalSdkMode",
+    "SUBSCRIPTION_PORTAL_HOSTED_BASE",
+    "SubscriptionEvents",
+    "SUBSCRIPTION_EVENT_TYPES",
+    "SUBSCRIPTION_BILLING_RULE_FIELDS",
+    "SUBSCRIPTION_ROUTES",
+    "is_subscription_active",
+    "is_subscription_terminal",
+    "subscription_portal_url",
+]

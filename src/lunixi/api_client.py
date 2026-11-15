@@ -8,7 +8,8 @@ one place.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, Mapping, Optional
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, Mapping, Optional
 
 from .auth.canonical_request import (
     HEADER_DATE,
@@ -30,12 +31,32 @@ from .errors import (
     ServiceUnavailableError,
     ValidationError,
 )
-from .http.transport import TransportError, build_path, serialize_body
+from .http.transport import HttpResponse, TransportError, build_path, serialize_body
 from .validation import header_value
 
-__all__ = ["ApiClient"]
+__all__ = ["ApiClient", "BinaryResponse"]
 
 _JSON_ACCEPT = "application/json"
+_BINARY_ACCEPT = "application/pdf, application/json"
+_FIAT_BASES = (
+    "/api/v1/payments",
+    "/api/v1/wallet",
+    "/api/v1/insurance",
+    "/api/v1/bank-connect",
+    "/api/v1/fraud",
+)
+
+
+@dataclass(frozen=True)
+class BinaryResponse:
+    """A 2xx answer that is a file (a PDF document), not the JSON envelope.
+
+    ``content_type`` is the response's ``Content-Type`` header (``None`` when
+    absent); ``content`` the raw body bytes.
+    """
+
+    content_type: Optional[str]
+    content: bytes = field(repr=False)
 _MAX_BACKOFF_SECONDS = 2.0
 _QUOTA_HEADERS = {
     "rate_limit": "x-ratelimit-limit",
@@ -87,6 +108,7 @@ class ApiClient:
         step_up: bool = False,
         idempotency_key: Optional[str] = None,
         max_retries: Optional[int] = None,
+        result_on_error: Optional[Callable[[int, Dict[str, Any]], bool]] = None,
     ) -> Dict[str, Any]:
         """Sends one request and returns the decoded response envelope.
 
@@ -105,6 +127,11 @@ class ApiClient:
             max_retries: Extra attempts for this request only; ``None`` (the
                 default) uses the configured value. ``0`` sends exactly once,
                 for a caller that runs its own attempt loop.
+            result_on_error: Optional predicate over ``(status_code, body)`` of
+                a non-2xx answer. When it returns ``True`` the decoded body is
+                returned instead of raised — for a route whose documented
+                non-2xx answer is a result (a split payment that is still
+                running). Every other non-2xx answer raises as usual.
 
         Raises:
             ValidationError: on 400.
@@ -162,33 +189,87 @@ class ApiClient:
                 raise ConfigurationError("Financial mutation requires an integer amount body.")
             if "amount" in body or financial.endswith(("/intents", "/direct/payment")):
                 amount_minor(body.get("amount"))
+        retry_limit = self._retry_limit(max_retries)
+        upper_method = method.upper()
+        signed_path = build_path(path, query)
+        url = self._config.url_for(signed_path)
+        from .validation import validate_money_fields
+
+        fiat_route = _is_fiat_route(path)
+        if fiat_route:
+            validate_money_fields(body)
+            validate_money_fields(query)
+        raw_body = serialize_body(body)
+
+        response = self._exchange(
+            upper_method,
+            url,
+            signed_path,
+            raw_body,
+            step_up,
+            idempotency_key,
+            retry_limit,
+            _JSON_ACCEPT,
+            result_on_error,
+        )
+        result = response.json()
+        if fiat_route:
+            validate_money_fields(result, response=True)
+        return result
+
+    def request_binary(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: Optional[Mapping[str, Any]] = None,
+        step_up: bool = False,
+        accept: str = _BINARY_ACCEPT,
+        max_retries: Optional[int] = None,
+    ) -> BinaryResponse:
+        """Sends one ``GET`` whose 2xx answer is a file and returns its bytes.
+
+        The same signing, retry, size limit and error mapping as
+        :meth:`request`; an error answer is still read as the JSON envelope and
+        raised. ``accept`` is the ``Accept`` header (not part of the signature).
+        """
+        if not isinstance(method, str) or method.upper() != "GET":
+            raise ConfigurationError("A binary request is a GET.")
+        header_value(accept, "accept")
+        retry_limit = self._retry_limit(max_retries)
+        signed_path = build_path(path, query)
+        url = self._config.url_for(signed_path)
+        if _is_fiat_route(path):
+            from .validation import validate_money_fields
+
+            validate_money_fields(query)
+        response = self._exchange(
+            "GET", url, signed_path, None, step_up, None, retry_limit, accept, None
+        )
+        return BinaryResponse(response.header("content-type"), response.body)
+
+    def _retry_limit(self, max_retries: Optional[int]) -> int:
         if max_retries is not None and (
             isinstance(max_retries, bool)
             or not isinstance(max_retries, int)
             or not 0 <= max_retries <= 5
         ):
             raise ConfigurationError("max_retries must be an integer from 0 to 5.")
-        retry_limit = self._config.max_retries if max_retries is None else max_retries
-        upper_method = method.upper()
-        signed_path = build_path(path, query)
-        url = self._config.url_for(signed_path)
-        from .validation import validate_money_fields
+        return self._config.max_retries if max_retries is None else max_retries
 
-        fiat_route = any(
-            path == base or path.startswith(base + "/")
-            for base in (
-                "/api/v1/payments",
-                "/api/v1/wallet",
-                "/api/v1/insurance",
-                "/api/v1/bank-connect",
-                "/api/v1/fraud",
-            )
-        )
-        if fiat_route:
-            validate_money_fields(body)
-            validate_money_fields(query)
-        raw_body = serialize_body(body)
-
+    def _exchange(
+        self,
+        upper_method: str,
+        url: str,
+        signed_path: str,
+        raw_body: Optional[str],
+        step_up: bool,
+        idempotency_key: Optional[str],
+        retry_limit: int,
+        accept: str,
+        result_on_error: Optional[Callable[[int, Dict[str, Any]], bool]],
+    ) -> HttpResponse:
+        """The attempt loop: returns a 2xx response (or an accepted error answer), else raises."""
         # 🔴 A write is retried ONLY with an idempotency key. Replaying an
         # unkeyed POST after a timeout can record the same event twice, and the
         # SDK cannot tell a lost request from a lost response.
@@ -199,7 +280,7 @@ class ApiClient:
         while True:
             attempt += 1
             headers = self._build_headers(
-                upper_method, signed_path, raw_body, step_up, idempotency_key
+                upper_method, signed_path, raw_body, step_up, idempotency_key, accept
             )
 
             try:
@@ -215,10 +296,7 @@ class ApiClient:
             if len(response.body) > self._config.max_response_bytes:
                 raise ApiError("Gateway response exceeds the configured limit.")
             if response.ok:
-                result = response.json()
-                if fiat_route:
-                    validate_money_fields(result, response=True)
-                return result
+                return response
 
             # One refresh-and-retry for an expired token. Bounded by the flag:
             # a second 401 is the account's answer, not a stale cache.
@@ -231,6 +309,11 @@ class ApiClient:
                 _backoff(attempt)
                 continue
 
+            if result_on_error is not None and result_on_error(
+                response.status_code, response.json()
+            ):
+                return response
+
             raise _to_api_error(response)
 
     def _build_headers(
@@ -240,9 +323,10 @@ class ApiClient:
         raw_body: Optional[str],
         step_up: bool,
         idempotency_key: Optional[str],
+        accept: str = _JSON_ACCEPT,
     ) -> Dict[str, str]:
         headers: Dict[str, str] = {
-            "Accept": _JSON_ACCEPT,
+            "Accept": accept,
             "User-Agent": self._config.user_agent,
             "Authorization": f"Bearer {header_value(self._tokens.get_token(), 'access_token', 8192)}",
         }
@@ -265,6 +349,10 @@ class ApiClient:
                 headers[HEADER_DIGEST] = digest
 
         return headers
+
+
+def _is_fiat_route(path: str) -> bool:
+    return any(path == base or path.startswith(base + "/") for base in _FIAT_BASES)
 
 
 def _read_quota(response: Any) -> Optional[Dict[str, Optional[int]]]:

@@ -13,7 +13,7 @@ import json
 import ssl
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Union
 from urllib.parse import quote, urlencode
 
 import rfc8785
@@ -195,10 +195,15 @@ class HttpTransport(Protocol):
         method: str,
         url: str,
         headers: Mapping[str, str],
-        body: Optional[str],
+        body: Optional[Union[str, bytes]],
         timeout: float,
     ) -> HttpResponse:
         """Sends one request and returns the response.
+
+        ``body`` is the serialized JSON ``str`` for every gateway request. It is
+        ``bytes`` only for the presigned storage upload of a payment-link image
+        (``PUT`` to the storage host, with no gateway credentials); send those
+        bytes as they are.
 
         Must NOT raise for a non-2xx status — return it. Raise
         :class:`TransportError` only when no response was received.
@@ -239,10 +244,10 @@ class UrllibTransport:
         method: str,
         url: str,
         headers: Mapping[str, str],
-        body: Optional[str],
+        body: Optional[Union[str, bytes]],
         timeout: float,
     ) -> HttpResponse:
-        data = body.encode("utf-8") if body is not None else None
+        data = body.encode("utf-8") if isinstance(body, str) else body
         request = urllib.request.Request(url=url, data=data, method=method.upper())
         for key, value in headers.items():
             request.add_header(key, value)

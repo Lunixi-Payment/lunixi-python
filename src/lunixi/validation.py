@@ -161,6 +161,82 @@ def validate_money_fields(value: Any, *, response: bool = False) -> None:
                 validate_money_fields(entry, response=response)
 
 
+#: Money members of the subscription and marketplace contracts (Node ``WIRE_MONEY_FIELDS``).
+WIRE_MONEY_FIELDS = frozenset(
+    (
+        "amount", "amountMinor", "price", "priceAmount", "paidAmount", "totalAmount",
+        "subtotalAmount", "taxAmount", "amountPaid", "legAmount", "chargeAmount",
+        "capturedAmount", "refundedAmount", "authorizedAmount", "compensatedAmount",
+        "requestedAmount", "refundableAmount", "nonRefundableAmount", "disputedAmount",
+        "legsAmount", "minAmount", "maxAmount", "minAmountMinor", "maxAmountMinor",
+        "unitPriceMinor", "collectedAmountMinor", "premiumAmount", "collectedPremiumAmount",
+        "inForcePremiumAmount", "cancelledPremiumAmount", "refundedPremiumAmount",
+        "refundOpenPremiumAmount", "insuranceValueAmount", "priceSnapshotAmount",
+        "sourceAmountMinor", "targetAmountMinor", "taxAmountMinor", "balanceMinor",
+        "balanceAfterMinor", "availableMinor", "blockedMinor", "availableWithoutOverdraftMinor",
+        "overdraftAvailableMinor", "sourceBalanceAfterMinor", "targetBalanceAfterMinor",
+        "balance", "availableBalance", "blockedBalance", "feeAmount", "feeAmountMinor",
+        "fixedAmountMinor", "minTransactionMinor", "commissionAmountMinor", "payoutAmountMinor",
+        "settlementAmountMinor", "netAmountMinor", "grossAmountMinor", "fixedAmount", "fixedFee",
+        "fixedFeeMinor", "mtdVolumeMinor", "orderAmountMinor", "capturedAmountMinor",
+        "cumulativeCapturedMinor", "remainingCapturableMinor", "refundAmountMinor",
+        "cumulativeRefundedMinor", "remainingRefundableMinor", "netAmount", "grossAmount",
+    )
+)  # fmt: skip
+
+#: Closed schema containers of those contracts; metadata, custom fields and provider bodies
+#: are opaque and not walked (Node ``WIRE_MONEY_CONTAINERS``).
+WIRE_MONEY_CONTAINERS = frozenset(
+    (
+        "data", "items", "legs", "steps", "pendingSteps", "schedule", "promissoryNote", "notes",
+        "aggregate", "refund", "dispute", "details", "payment", "basketItems", "sellers",
+        "scenario", "counters", "balances", "totals", "orders", "policies", "options", "quote",
+        "order", "transfer", "commission", "commissionRule", "fee", "settlement", "payout",
+        "context",
+    )
+)  # fmt: skip
+
+_SIGNED_WIRE_MONEY = ("availableMinor", "availableWithoutOverdraftMinor")
+
+
+def validate_wire_money(value: Any) -> None:
+    """Subscription and marketplace bodies, filters and answers.
+
+    Every listed money member is a canonical minor-unit string (``"0"`` allowed;
+    signed only for balances), checked the same way in both directions without
+    coercion. The error names the member, never its value.
+    """
+    if isinstance(value, (list, tuple)):
+        for entry in value:
+            validate_wire_money(entry)
+        return
+    if not isinstance(value, dict):
+        return
+    for key, entry in value.items():
+        if entry is None:
+            continue
+        if key in WIRE_MONEY_FIELDS:
+            signed = "balance" in key.lower() or key in _SIGNED_WIRE_MONEY
+            try:
+                amount_minor(entry, positive=False, signed=signed)
+            except ConfigurationError:
+                raise ConfigurationError(
+                    f"{key} must be a canonical string in minor units."
+                ) from None
+        elif key == "suggestedAmountsMinor":
+            if not isinstance(entry, list):
+                raise ConfigurationError("suggestedAmountsMinor must be a list.")
+            for amount in entry:
+                try:
+                    amount_minor(amount)
+                except ConfigurationError:
+                    raise ConfigurationError(
+                        "suggestedAmountsMinor must hold canonical strings in minor units."
+                    ) from None
+        elif key in WIRE_MONEY_CONTAINERS:
+            validate_wire_money(entry)
+
+
 def currency_code(value: str) -> str:
     if not isinstance(value, str) or value not in CURRENCIES:
         raise ConfigurationError("A supported uppercase currency is required.")
@@ -214,15 +290,23 @@ def origin_url(value: str, allow_loopback_http: bool = False) -> str:
     return value.rstrip("/")
 
 
+#: The one panel family an API key reaches: the hosted customer-portal links of
+#: subscriptions. Every other ``/api/panel/`` path stays refused.
+PANEL_API_PREFIXES = ("/api/panel/v1/subscriptions/portal/",)
+
+
 def gateway_path(value: str) -> str:
     if (
         not isinstance(value, str)
-        or not value.startswith("/api/v1/")
+        or not (value.startswith("/api/v1/") or value.startswith(PANEL_API_PREFIXES))
         or value.startswith("//")
         or "\\" in value
         or any(ord(c) <= 32 or ord(c) >= 127 for c in value)
     ):
-        raise ConfigurationError("Path must remain under /api/v1/ on the configured origin.")
+        raise ConfigurationError(
+            "Path must remain under /api/v1/ (or the subscription portal panel routes) "
+            "on the configured origin."
+        )
     u = urlsplit(value)
     if u.netloc or u.scheme or u.fragment:
         raise ConfigurationError("Invalid gateway path.")

@@ -13,11 +13,21 @@ from typing import Optional
 from .api_client import ApiClient
 from .auth.ed25519_signer import Ed25519Signer
 from .auth.token_manager import TokenManager, TokenStore
+from .bank_connect import BankConnectClient
 from .configuration import DEFAULT_AUTH_TOKEN_PATH, Configuration
 from .fraud.fraud_client import FraudClient
 from .http.transport import HttpTransport
+from .identity import IdentityClient
+from .insurance import InsuranceClient
+from .kyc import KycClient
+from .marketplace import MarketplaceClient
+from .payment_links import PaymentLinksClient
 from .payments import PaymentsClient
 from .physical_pos import PhysicalPosClient, PhysicalPosManagementClient
+from .reference import ReferenceClient
+from .sanction import SanctionClient
+from .subscriptions import SubscriptionsClient
+from .wallet import WalletClient
 from .webhook.verifier import WebhookVerifier
 
 __all__ = ["LunixiClient"]
@@ -91,12 +101,30 @@ class LunixiClient:
         self._api = ApiClient(self._config, self._signer, self._tokens)
         self._fraud = FraudClient(self._api)
         self._payments = PaymentsClient(self._api)
+        self._payment_links = PaymentLinksClient(self._api, self._config)
         self._physical_pos = PhysicalPosClient(self._api)
         self._physical_pos_management = PhysicalPosManagementClient(self._api)
+        self._reference = ReferenceClient(self._api)
+        self._wallet = WalletClient(self._api)
+        self._bank_connect = BankConnectClient(self._api)
+        self._sanction = SanctionClient(self._api)
+        self._insurance = InsuranceClient(self._api)
+        self._subscriptions = SubscriptionsClient(self._api)
+        self._kyc = KycClient(self._api)
+        self._identity = IdentityClient(self._api)
+        self._marketplace = MarketplaceClient(self._api)
 
     def payments(self) -> PaymentsClient:
-        """Typed payment intent, read, capture, refund, void and split operations."""
+        """Typed payment intent, method, card, read, capture, refund, void and split operations."""
         return self._payments
+
+    def payment_links(self) -> PaymentLinksClient:
+        """Payment links: create, change, share and follow them, and upload link images."""
+        return self._payment_links
+
+    def reference(self) -> ReferenceClient:
+        """Reference data: the Türkiye address dictionary for ``ADDRESS`` input fields."""
+        return self._reference
 
     def physical_pos(self) -> PhysicalPosClient:
         """Physical POS payments, transactions, reports and end-of-day results."""
@@ -105,6 +133,40 @@ class LunixiClient:
     def physical_pos_management(self) -> PhysicalPosManagementClient:
         """Physical POS overview, catalog, stores, registers, terminals and devices."""
         return self._physical_pos_management
+
+    def wallet(self) -> WalletClient:
+        """Wallet end users, transfers, withdrawals, top-ups, payments, QR and bulk payouts."""
+        return self._wallet
+
+    def bank_connect(self) -> BankConnectClient:
+        """Connected bank accounts, balances and transactions; ``.transfers`` and ``.fx``."""
+        return self._bank_connect
+
+    def sanction(self) -> SanctionClient:
+        """Sanctions screening, ongoing monitoring and entity intelligence."""
+        return self._sanction
+
+    def insurance(self) -> InsuranceClient:
+        """Insurance products, quotes, orders, policies, reconciliation and leads."""
+        return self._insurance
+
+    def subscriptions(self) -> SubscriptionsClient:
+        """Subscriptions; ``.plans``, ``.customers``, ``.cards``, ``.invoices``, ``.portal``,
+        ``.products``, ``.features``, ``.addons`` and ``.usage``."""
+        return self._subscriptions
+
+    def kyc(self) -> KycClient:
+        """KYC, KYB and evidence sessions, your KYC policy and webhook outbox."""
+        return self._kyc
+
+    def identity(self) -> IdentityClient:
+        """Device and account-linking signals of a browser trace."""
+        return self._identity
+
+    def marketplace(self) -> MarketplaceClient:
+        """Split charges across sub-dealers, the sub-dealer lifecycle, commissions,
+        payouts and the audit log."""
+        return self._marketplace
 
     def fraud(self) -> FraudClient:
         """The fraud surface: decisions, decision logs and event ingest."""

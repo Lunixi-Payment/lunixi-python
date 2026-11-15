@@ -80,3 +80,11 @@ targetRules = ["generic-api-key"]
 paths = ['''(?:^|/)tests/fixtures/physical-pos-parity\.json$''']
 regexTarget = "line"
 regexes = ['''\A\s*\Q"key": "7b0c6a1e-2f8d-4c55-9a51-3f0e8d1c2a90",\E\s*\z'''] # gitleaks:allow
+
+[[allowlists]]
+description = "Reviewed synthetic idempotency value in an offline test only"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''(?:^|/)tests/test_insurance\.py$''']
+regexTarget = "secret"
+regexes = ['''\Ainsurance\-op\-0001\z''']
