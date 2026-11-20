@@ -29,10 +29,21 @@ client = LunixiClient(
     private_key=os.environ["LUNIXI_PRIVATE_KEY"],
     max_retries=0,
 )
+# Her ödemenin zorunlu sipariş bilgileri (kendi checkout'unuzdan alın, yer tutucu değil).
+order = dict(
+    buyer={"name": "Ada", "surname": "Yilmaz", "identityNumber": "11111111111",
+           "email": "ada@example.com", "gsmNumber": "+905350000000",
+           "city": "Istanbul", "country": "Turkey", "zipCode": "34000"},
+    billing_address={"contactName": "Ada Yilmaz", "address": "Example Street 1",
+                     "city": "Istanbul", "country": "Turkey", "zipCode": "34000"},
+    basket_items=[{"id": "SKU-1", "name": "Hediye kartı", "category1": "Dijital",
+                   "itemType": "VIRTUAL", "price": "1990"}],
+)
 intent = client.payments().create_intent(
     CreateIntent("1990", "TRY", "kalici-siparis-123",
                  callback_url="https://magaza.example/return/123",
-                 enabled_installments=[1, 2, 3]),  # isteğe bağlı: en fazla 3 taksit
+                 enabled_installments=[1, 2, 3],  # isteğe bağlı: en fazla 3 taksit
+                 **order),
     idempotency_key=veritabaninda_saklanan_deneme_anahtari,
 )
 # Önce kullanıcı/sipariş sahipliği doğrulanmalıdır:
@@ -42,7 +53,9 @@ yonlendirme = intent.hosted_url
 
 Tutarlar kanonik küçük birim string değerleridir (`"1990"` = 19,90 TRY); sayısal JSON, float, bool, sıfır ve eski üst düzey tutar alanları ağdan önce reddedilir. `minor_units('19.90','TRY')` ondalık metni para biriminin basamak sayısıyla tam olarak dönüştürür; JPY 0, TRY 2, KWD 3 basamak kullanır. Fiat tutar üst sınırı `"9223372036854775807"` değeridir; sağlayıcı sınırı daha düşük olabilir. `preauth=True` yalnız ön provizyon açar; sipariş ödenmiş sayılmaz. Taksit, uygun yemek kartı/alışveriş kredisi, sigorta ve çoklu kart Lunixi panel/form ayarlarıyla yönetilir. `enabled_installments` bir ödeme için formun sunacağı taksit sayılarını yalnızca daraltır (`[1]` = yalnız tek çekim); form, panel ayarlarınızın, kartın ve platform üst sınırının da izin verdiği sayıları gösterir, `None` kısıt yok demektir. Sayılar 1–36 arası tamsayı, tekrarsız olmalı ve 1'i içermelidir; aksi hâlde istekten önce `ConfigurationError` oluşur. Liste `enabledInstallments` olarak artan sırada gönderilir. Örnekler kart numarası/CVV toplamaz.
 
-`basketItems` taşıyan gateway gövdelerinde (`client.api().request(...)` ile gönderilir; `CreateIntent` sepet kalemi oluşturmaz) her satır isteğe bağlı `productCategory` alanını taşıyabilir: Lunixi ürün kategorisi kodu; yasal taksit sınırı olan ödeme yöntemleri (ör. alışveriş kredisi) ve diğer platform özellikleri tarafından kullanılır. Alanı göndermezseniz mevcut davranış korunur; gateway bilinmeyen kodu 400 ile reddeder. Kodlar `ProductCategory` sabitleri olarak hazırdır (`from lunixi import ProductCategory`; `ProductCategory.MOBILE_PHONE`, 40 kodun tamamı `ProductCategory.ALL` içinde). Liste yalnız sona ekleme ile büyüdüğünden değer düz string olarak kalır ve SDK göndermeden önce denetlemez.
+Her ödeme gövdesi sipariş bilgilerini taşır (`lunixi.payments.order_details`): `buyer` (`name`, `surname`, `identityNumber` — T.C. kimlik ya da pasaport numarası, `email` — ASCII, `gsmNumber`, `city`, `country`, `zipCode`, `ip` — alıcının tarayıcı IP'si), `billingAddress` (`contactName`, `address`, `city`, `country`, `zipCode`) ve en az bir `basketItems` kalemi (`id`, `name`, `category1`, `itemType`, `price`; fiyatların toplamı tutara eşittir); `PHYSICAL` kalemde `shippingAddress` de gerekir. `CreateIntent` ve pazaryeri intent'lerinde `ip` gönderilmeyebilir: Lunixi formu IP'yi alıcının tarayıcısından alır. `create_intent`, `create_marketplace_intent`, `direct_method_payment`, `create_split_payment`, pazaryeri kart çekimleri, `store_card` (yalnız alıcı ve fatura adresi) ve cüzdan kartlı yükleme eksik alanların yollarını sayan `ConfigurationError` ile göndermeden durur (`missing_order_details(body)` aynı listeyi döner). Gateway eksik alana 400 `payment.order.field_required`, geçersiz değere `payment.order.field_invalid` döner (`OrderFieldErrorCode`, `OrderFieldReason`).
+
+Sepet kalemleri her satırda isteğe bağlı `productCategory` alanını taşıyabilir: Lunixi ürün kategorisi kodu; yasal taksit sınırı olan ödeme yöntemleri (ör. alışveriş kredisi) ve diğer platform özellikleri tarafından kullanılır. Alanı göndermezseniz mevcut davranış korunur; gateway bilinmeyen kodu 400 ile reddeder. Kodlar `ProductCategory` sabitleri olarak hazırdır (`from lunixi import ProductCategory`; `ProductCategory.MOBILE_PHONE`, 40 kodun tamamı `ProductCategory.ALL` içinde). Liste yalnız sona ekleme ile büyüdüğünden değer düz string olarak kalır ve SDK göndermeden önce denetlemez.
 
 `payments()` yardımcıları: `create_intent`, `get`, `list`, `capture`, `refund`, `void`, `list_payment_methods` / `methods`, `direct_method_payment`, `confirm_payment_action` / `resend_payment_action`, `get_promissory_notes`, `cancel_promissory_notes`, `download_promissory_note_document`, `list_bank_transfer_exceptions`, `accept_bank_transfer_exception`, `mark_bank_transfer_exception_refunded`, `create_split_payment`, `get_split`, `list_splits`, `refund_split`, `create_marketplace_intent`, `bin_info`, `installment_options`, `card_taxonomy`, `store_card`, `deactivate_stored_card`, `list_stored_cards`, `get_stored_card`, `failover_recovery_analytics`, `provider_credential_analytics`. Adres sözlüğü `client.reference()` altındadır: `list_provinces()`, `list_districts(province_code)`, `list_neighborhoods(district_code)`. Finansal işlemler kalıcı `idempotency_key` ister. Intent dışındaki yanıtlar tüm gateway zarfını korur; `details`, `pageInfo`, request ID kaybolmaz. API'de intent yanıtı `paymentId`/`token`, ödeme sorgusu `data.id`, webhook `data.intentId` kullanır. Yalnız HTTP 2xx finansal kesinlik değildir.
 
@@ -116,7 +129,7 @@ Idempotency anahtarı (en fazla 200 karakter) parçalı ödemenin kimliğidir: b
 from lunixi import CreateIntent, MultiSellerPolicy
 
 response = client.payments().create_marketplace_intent(
-    CreateIntent("10050", "TRY", "persisted-order-123"),
+    CreateIntent("10050", "TRY", "persisted-order-123", **order),  # sipariş bilgileri yukarıdaki gibi
     sellers=[
         {"subDealerId": "d_alice", "amountMinor": "6000"},
         {"subDealerId": "d_bob", "amountMinor": "4050"},
@@ -341,7 +354,7 @@ link = marketplace.onboarding_token(dealer["id"])
 # Send the dealer to marketplace_onboarding_url(link): KYC, IBAN and contract, then ACTIVE.
 
 intent = marketplace.create_checkout_intent(
-    CreateIntent("100000", "TRY", "ORD-7"),
+    CreateIntent("100000", "TRY", "ORD-7", **order),  # sipariş bilgileri yukarıdaki gibi
     [
         {"subDealerId": "d_alice", "amountMinor": "60000"},
         {"subDealerId": "d_bob", "amountMinor": "40000"},

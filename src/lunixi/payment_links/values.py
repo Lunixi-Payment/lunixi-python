@@ -82,10 +82,13 @@ class PaymentLinkEnvironment:
 
 
 class BuyerFieldRequirement:
-    HIDDEN = "HIDDEN"
-    OPTIONAL = "OPTIONAL"
+    """Value of a ``buyerFields`` entry. Payment providers require the buyer,
+    the identity number and the billing address, so the link page always asks
+    all five fields: ``REQUIRED`` is the only value (the gateway answers any
+    other with 400; leaving a field out means ``REQUIRED``)."""
+
     REQUIRED = "REQUIRED"
-    ALL = (HIDDEN, OPTIONAL, REQUIRED)
+    ALL = (REQUIRED,)
 
 
 class CustomFieldType:

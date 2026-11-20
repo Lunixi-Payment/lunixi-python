@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from lunixi.commerce import CommerceError
+from tests.support.order_details import order_details
 from tests.test_commerce import fresh_event
 
 
@@ -62,7 +63,7 @@ def csrf(web, key):
 
 def test_native_secure_cookie_csrf_ownership_and_host_guard(web):
     web, gateway = web
-    key, token = web.orders.seed("owner")
+    key, token = web.orders.seed("owner", order_details=order_details("1990"))
     assert web.get("/checkout/" + key).status_code == 403
     response = web.get("/claim/" + token)
     assert response.status_code == 303
@@ -71,7 +72,7 @@ def test_native_secure_cookie_csrf_ownership_and_host_guard(web):
     assert web.get("/claim/" + token).status_code == 403
     nonce = csrf(web, key)
     assert web.post("/checkout/" + key).status_code == 409
-    other, _ = web.orders.seed("other")
+    other, _ = web.orders.seed("other", order_details=order_details("1990"))
     assert web.post("/checkout/" + other, headers={"X-CSRF-Token": nonce}).status_code == 409
     assert gateway.calls == []
     page = web.get("/checkout/" + key)
@@ -82,7 +83,7 @@ def test_native_secure_cookie_csrf_ownership_and_host_guard(web):
 
 def test_native_checkout_browser_return_is_not_payment_and_signed_webhook_is(web):
     web, gateway = web
-    key, token = web.orders.seed("owner")
+    key, token = web.orders.seed("owner", order_details=order_details("1990"))
     web.get("/claim/" + token)
     nonce = csrf(web, key)
     response = web.post("/checkout/" + key, headers={"X-CSRF-Token": nonce})
@@ -109,7 +110,7 @@ def test_native_checkout_browser_return_is_not_payment_and_signed_webhook_is(web
 
 def test_native_callback_rollback_retries_and_manual_hold(web, monkeypatch):
     web, gateway = web
-    key, token = web.orders.seed("owner", hold=True)
+    key, token = web.orders.seed("owner", hold=True, order_details=order_details("1990"))
     web.get("/claim/" + token)
     web.orders.start(key, "owner")
     payment_id = next(iter(gateway.payments))
@@ -138,7 +139,7 @@ def test_native_callback_rollback_retries_and_manual_hold(web, monkeypatch):
 def test_optional_hosted_uses_exact_backend_url_without_replacing_attempt(web):
     web, gateway = web
     web.orders.settings = replace(web.orders.settings, mode="hosted")
-    key, token = web.orders.seed("owner")
+    key, token = web.orders.seed("owner", order_details=order_details("1990"))
     web.get("/claim/" + token)
     nonce = csrf(web, key)
     response = web.post("/checkout/" + key, headers={"X-CSRF-Token": nonce})
@@ -155,7 +156,7 @@ def test_optional_hosted_uses_exact_backend_url_without_replacing_attempt(web):
 
 def test_rendered_checkout_csp_permits_only_default_gateway_form_posts(web):
     web, gateway = web
-    key, token = web.orders.seed("owner")
+    key, token = web.orders.seed("owner", order_details=order_details("1990"))
     web.get("/claim/" + token)
     page = web.get("/checkout/" + key)
     assert page.status_code == 200
@@ -179,7 +180,7 @@ def test_operator_form_origins_are_rendered_and_malicious_config_fails_closed(ki
     origins = ("https://api-gateway.lunixi.com", "https://provider.example:8443")
     settings = replace(orders.settings, form_action_origins=origins)
     web = Web(kind, create_app(settings, orders.service.client))
-    key, token = web.orders.seed("owner")
+    key, token = web.orders.seed("owner", order_details=order_details("1990"))
     web.get("/claim/" + token)
     page = web.get("/checkout/" + key)
     assert page.status_code == 200

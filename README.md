@@ -49,10 +49,21 @@ client = LunixiClient(
     private_key=os.environ["LUNIXI_PRIVATE_KEY"],
     max_retries=0,
 )
+# Order details every payment requires (take them from your checkout, never a placeholder).
+order = dict(
+    buyer={"name": "Ada", "surname": "Yilmaz", "identityNumber": "11111111111",
+           "email": "ada@example.com", "gsmNumber": "+905350000000",
+           "city": "Istanbul", "country": "Turkey", "zipCode": "34000"},
+    billing_address={"contactName": "Ada Yilmaz", "address": "Example Street 1",
+                     "city": "Istanbul", "country": "Turkey", "zipCode": "34000"},
+    basket_items=[{"id": "SKU-1", "name": "Gift card", "category1": "Digital",
+                   "itemType": "VIRTUAL", "price": "1990"}],
+)
 intent = client.payments().create_intent(
     CreateIntent("1990", "TRY", "persisted-order-123",
                  callback_url="https://shop.example/return/123",
-                 enabled_installments=[1, 2, 3]),  # optional: at most 3 installments
+                 enabled_installments=[1, 2, 3],  # optional: at most 3 installments
+                 **order),
     idempotency_key=persisted_attempt_key,
 )
 # Return only after authenticating ownership of the persisted order:
@@ -63,7 +74,9 @@ hosted_url = intent.hosted_url
 
 Money is canonical minor-unit strings, from 1 to 9,223,372,036,854,775,807; booleans, floats, zero and removed root amount fields fail before token exchange/network. `minor_units('19.90','TRY')` converts a plain decimal string exactly; JPY has0 decimals and KWD 3. Preauthorization is a JSON boolean; an authorization is on hold, not paid. Available methods, installments, eligible shopping credit/meal cards, insurance and multi-card options belong to the Lunixi form/panel. `enabled_installments` only narrows the installment counts the form offers for one payment (`[1]` = single payment only); the form shows only the counts your panel settings, the card and the platform maximum also allow, and `None` means no restriction. Counts are integers 1–36, distinct and include 1, otherwise `ConfigurationError` is raised before any request; the list is sent as `enabledInstallments` in ascending order. The examples never collect card numbers/CVV.
 
-Gateway bodies that carry `basketItems` (sent through `client.api().request(...)`; `CreateIntent` does not build basket items) accept the optional `productCategory` on each entry: the Lunixi product category code, used by payment methods with legal installment limits (e.g. shopping loan) and other platform features. Leaving it out keeps today's behaviour; the gateway rejects an unknown code with 400. The codes are available as `ProductCategory` constants (`from lunixi import ProductCategory`; `ProductCategory.MOBILE_PHONE`, all 40 in `ProductCategory.ALL`). The list only grows by appending, so the value stays a plain string and the SDK does not check it before sending.
+Every payment body carries the order details (`lunixi.payments.order_details`): `buyer` (`name`, `surname`, `identityNumber` — Turkish ID or passport number, `email` — ASCII, `gsmNumber`, `city`, `country`, `zipCode`, `ip` — the buyer's browser IP), `billingAddress` (`contactName`, `address`, `city`, `country`, `zipCode`) and at least one `basketItems` entry (`id`, `name`, `category1`, `itemType`, `price`; the prices add up to the amount); a `PHYSICAL` item also needs `shippingAddress`. On `CreateIntent` and the marketplace intents `ip` may be left out: the Lunixi form takes it from the buyer's browser. `create_intent`, `create_marketplace_intent`, `direct_method_payment`, `create_split_payment`, marketplace card charges, `store_card` (buyer and billing address only) and the wallet card top-up raise `ConfigurationError` naming the missing paths before sending (`missing_order_details(body)` returns the same list). The gateway answers a missing field with 400 `payment.order.field_required` and an invalid one with `payment.order.field_invalid` (`OrderFieldErrorCode`, `OrderFieldReason`).
+
+Basket items accept the optional `productCategory` on each entry: the Lunixi product category code, used by payment methods with legal installment limits (e.g. shopping loan) and other platform features. Leaving it out keeps today's behaviour; the gateway rejects an unknown code with 400. The codes are available as `ProductCategory` constants (`from lunixi import ProductCategory`; `ProductCategory.MOBILE_PHONE`, all 40 in `ProductCategory.ALL`). The list only grows by appending, so the value stays a plain string and the SDK does not check it before sending.
 
 | Helper | Merchant API |
 |---|---|
@@ -159,7 +172,7 @@ The idempotency key (at most 200 characters) is the identity of the split paymen
 from lunixi import CreateIntent, MultiSellerPolicy
 
 response = client.payments().create_marketplace_intent(
-    CreateIntent("10050", "TRY", "persisted-order-123"),
+    CreateIntent("10050", "TRY", "persisted-order-123", **order),  # order details as above
     sellers=[
         {"subDealerId": "d_alice", "amountMinor": "6000"},
         {"subDealerId": "d_bob", "amountMinor": "4050"},
@@ -384,7 +397,7 @@ link = marketplace.onboarding_token(dealer["id"])
 # Send the dealer to marketplace_onboarding_url(link): KYC, IBAN and contract, then ACTIVE.
 
 intent = marketplace.create_checkout_intent(
-    CreateIntent("100000", "TRY", "ORD-7"),
+    CreateIntent("100000", "TRY", "ORD-7", **order),  # order details as above
     [
         {"subDealerId": "d_alice", "amountMinor": "60000"},
         {"subDealerId": "d_bob", "amountMinor": "40000"},

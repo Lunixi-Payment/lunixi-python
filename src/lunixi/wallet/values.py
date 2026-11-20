@@ -374,12 +374,14 @@ WALLET_ROUTES = freeze_routes(
             "path": "/api/v1/wallet/operations/:operationId/receipt",
             "idempotencyKey": False,
         },
-        # Top-ups
+        # Top-ups. The payment provider requires the buyer and billing address
+        # (``buyer.ip``: the user's browser IP); a missing field is 400
+        # ``payment.order.field_required`` with the paths in ``details.fields``.
         "startCardTopup": {
             "method": "POST",
             "path": "/api/v1/wallet/topups/card",
             "idempotencyKey": True,
-            "required": ["creditWalletAccountId", "amount", "currency"],
+            "required": ["creditWalletAccountId", "amount", "currency", "buyer", "billingAddress"],
             "optional": [
                 "fundingMerchantId",
                 "savedCardUserKey",
@@ -387,6 +389,7 @@ WALLET_ROUTES = freeze_routes(
                 "savedConsumerToken",
                 "savedPublicCardStorageToken",
                 "returnUrl",
+                "shippingAddress",
             ],
         },
         "getTopup": {

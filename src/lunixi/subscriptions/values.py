@@ -18,6 +18,7 @@ from urllib.parse import quote
 from .._routes import freeze_routes
 
 __all__ = [
+    "SubscriptionCustomerErrorCode",
     "SubscriptionStatus",
     "SUBSCRIPTION_ACTIVE_STATES",
     "SUBSCRIPTION_TERMINAL_STATES",
@@ -36,6 +37,14 @@ __all__ = [
     "is_subscription_terminal",
     "subscription_portal_url",
 ]
+
+
+class SubscriptionCustomerErrorCode:
+    """Errors of ``customers.upsert``: a missing or invalid customer field
+    (``details.field``, ``details.reason``, ``details.fields``)."""
+
+    FIELD_REQUIRED = "subscription.customer.field_required"
+    FIELD_INVALID = "subscription.customer.field_invalid"
 
 
 class SubscriptionStatus:
@@ -308,8 +317,28 @@ SUBSCRIPTION_ROUTES = freeze_routes(
             "PUT",
             f"{_SUBS}/customers",
             idempotencyKey="optional",
-            required=["externalId"],
-            optional=["email", "name", "phone", "locale", "metadata"],
+            # Renewals take the buyer from this record: identity and billing
+            # details are required (400 ``subscription.customer.field_required``).
+            required=[
+                "externalId",
+                "name",
+                "surname",
+                "email",
+                "gsmNumber",
+                "identityNumber",
+                "billingAddress",
+                "billingCity",
+                "billingCountry",
+                "billingZipCode",
+            ],
+            optional=[
+                "billingContactName",
+                "shippingContactName",
+                "shippingAddress",
+                "shippingCity",
+                "shippingCountry",
+                "shippingZipCode",
+            ],
         ),
         "customers.get": _route("GET", f"{_SUBS}/customers/:customerId"),
         "customers.getByExternalId": _route("GET", f"{_SUBS}/customers/by-external/:externalId"),

@@ -10,6 +10,7 @@ from typing import Any, Callable, Mapping, Optional
 
 from ..client import LunixiClient
 from ..payments import CreateIntent, IntentResult
+from ..payments.order_details import assert_order_details
 from ..validation import amount_minor, identifier
 from ..webhook.verifier import WebhookEvent
 from .models import CommerceError, OrderSnapshot, PaymentDecision, evaluate
@@ -32,6 +33,16 @@ _RANK = {
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+#: Order details are sent with the intent but are not part of the attempt's
+#: request hash: a corrected address or phone number reuses the attempt instead
+#: of stranding it (same as the PHP ``CheckoutService``).
+_ORDER_DETAIL_FIELDS = ("buyer", "billingAddress", "shippingAddress", "basketItems")
+
+
+def _hashed_body(body: Mapping[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in body.items() if k not in _ORDER_DETAIL_FIELDS}
 
 
 class CheckoutService:
@@ -81,9 +92,22 @@ class CheckoutService:
         if hosted:
             metadata["allowedOrigin"] = "https://pay.lunixi.com"
         request = CreateIntent(
-            order.amount, order.currency, order.order_id, callback_url, preauth, locale, metadata
+            order.amount,
+            order.currency,
+            order.order_id,
+            callback_url,
+            preauth,
+            locale,
+            metadata,
+            buyer=order.buyer,
+            billing_address=order.billing_address,
+            shipping_address=order.shipping_address,
+            basket_items=order.basket_items,
         )
-        digest = _hash(json.dumps(request.to_dict(), separators=(",", ":")))
+        body = request.to_dict()
+        # Checked BEFORE the reservation: an incomplete order never becomes a stored attempt.
+        assert_order_details(body, "A checkout", checkout_intent=True)
+        digest = _hash(json.dumps(_hashed_body(body), separators=(",", ":")))
         with self.store.transaction(key) as tx:
             record = tx.load()
             if record is None:

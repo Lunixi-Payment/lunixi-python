@@ -39,7 +39,7 @@ __all__ = [
     "plain",
 ]
 
-#: Keys of ``buyerFields``; each is ``HIDDEN`` | ``OPTIONAL`` | ``REQUIRED``.
+#: Keys of ``buyerFields``; each is ``REQUIRED`` (the link page always asks them).
 BUYER_FIELD_KEYS = ("name", "email", "phone", "address", "identityNumber")
 #: Keys of ``recipient``.
 RECIPIENT_KEYS = ("name", "email", "phone")
@@ -412,7 +412,7 @@ class CreatePaymentLinkRequest:
 
     def with_buyer_fields(self, value: Optional[Mapping[str, str]]) -> CreatePaymentLinkRequest:
         """Each of ``name``, ``email``, ``phone``, ``address``, ``identityNumber``:
-        ``HIDDEN`` | ``OPTIONAL`` | ``REQUIRED`` (:class:`BuyerFieldRequirement`)."""
+        ``REQUIRED`` (:class:`BuyerFieldRequirement`): the link page always asks all five."""
         fields = _object(value, "buyerFields")
         if fields is not None:
             _assert_keys(fields, BUYER_FIELD_KEYS, "buyerFields")

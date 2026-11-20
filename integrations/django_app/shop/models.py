@@ -21,6 +21,9 @@ class Order(models.Model):
     stock = models.ForeignKey(Stock, on_delete=models.PROTECT)
     amount = models.PositiveBigIntegerField()
     currency = models.CharField(max_length=3, default="TRY")
+    # buyer, billingAddress, basketItems (+ shippingAddress for shipped goods):
+    # every payment requires them; take them from your checkout.
+    order_details = models.JSONField(default=dict)
     state = models.CharField(max_length=32, default="pending")
     captured = models.PositiveBigIntegerField(default=0)
     refunded = models.PositiveBigIntegerField(default=0)

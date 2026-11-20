@@ -130,8 +130,13 @@ from .payment_links import (
     PaymentLinkUsage,
 )
 from .payments import (
+    ADDRESS_REQUIRED_FIELDS,
     BANK_TRANSFER_OTHER_BANKS_CODE,
+    BASKET_ITEM_REQUIRED_FIELDS,
+    BUYER_REQUIRED_FIELDS,
+    CHECKOUT_INTENT_BUYER_OPTIONAL_FIELDS,
     METHOD_BLOCK_FIELDS,
+    ORDER_DETAILS_REQUIRED_FIELDS,
     SPLIT_LEG_BLOCK_FIELDS,
     SPLIT_LEG_EVENTS_SUBSCRIPTION,
     BankTransferInstruction,
@@ -140,6 +145,8 @@ from .payments import (
     InstallmentOptionsRequest,
     IntentResult,
     MultiSellerPolicy,
+    OrderFieldErrorCode,
+    OrderFieldReason,
     PaymentActionType,
     PaymentBankTransferEvents,
     PaymentBankTransferExceptionKind,
@@ -156,6 +163,8 @@ from .payments import (
     SplitPaymentRequest,
     SplitPaymentStatus,
     StoreCardRequest,
+    assert_order_details,
+    missing_order_details,
 )
 from .physical_pos import (
     PHYSICAL_POS_EVENT_PATTERN,
@@ -182,6 +191,7 @@ from .sanction import (
 )
 from .subscriptions import (
     SubscriptionCollectionMethod,
+    SubscriptionCustomerErrorCode,
     SubscriptionEvents,
     SubscriptionInvoiceStatus,
     SubscriptionPage,
@@ -296,6 +306,16 @@ __all__ = [
     "SubscriptionsClient",
     "SubscriptionPage",
     "SubscriptionStatus",
+    "SubscriptionCustomerErrorCode",
+    "ORDER_DETAILS_REQUIRED_FIELDS",
+    "BUYER_REQUIRED_FIELDS",
+    "CHECKOUT_INTENT_BUYER_OPTIONAL_FIELDS",
+    "ADDRESS_REQUIRED_FIELDS",
+    "BASKET_ITEM_REQUIRED_FIELDS",
+    "OrderFieldErrorCode",
+    "OrderFieldReason",
+    "missing_order_details",
+    "assert_order_details",
     "SubscriptionInvoiceStatus",
     "SubscriptionCollectionMethod",
     "SubscriptionEvents",

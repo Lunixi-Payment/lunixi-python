@@ -40,6 +40,17 @@ from .marketplace_intent import (
     assert_marketplace_intent_payload,
     marketplace_intent_body,
 )
+from .order_details import (
+    ADDRESS_REQUIRED_FIELDS,
+    BASKET_ITEM_REQUIRED_FIELDS,
+    BUYER_REQUIRED_FIELDS,
+    CHECKOUT_INTENT_BUYER_OPTIONAL_FIELDS,
+    ORDER_DETAILS_REQUIRED_FIELDS,
+    OrderFieldErrorCode,
+    OrderFieldReason,
+    assert_order_details,
+    missing_order_details,
+)
 from .payment_method_values import (
     CARD_ONLY_FIELDS,
     DIRECT_METHOD_PAYMENT_FIELDS,
@@ -89,6 +100,15 @@ __all__ = [
     "CreateIntent",
     "IntentResult",
     "PaymentsClient",
+    "ORDER_DETAILS_REQUIRED_FIELDS",
+    "BUYER_REQUIRED_FIELDS",
+    "CHECKOUT_INTENT_BUYER_OPTIONAL_FIELDS",
+    "ADDRESS_REQUIRED_FIELDS",
+    "BASKET_ITEM_REQUIRED_FIELDS",
+    "OrderFieldErrorCode",
+    "OrderFieldReason",
+    "missing_order_details",
+    "assert_order_details",
     "ProductCategory",
     "ENABLED_INSTALLMENTS_MIN",
     "ENABLED_INSTALLMENTS_MAX",
@@ -242,6 +262,13 @@ class CreateIntent:
     the card and the platform maximum. ``None`` means no restriction. Integers
     1–36, no duplicates, 1 included; sent as ``enabledInstallments`` in
     ascending order.
+
+    Order details are required (:mod:`lunixi.payments.order_details`):
+    ``buyer`` (``ip`` may be left out here: the Lunixi form takes it from the
+    buyer's browser), ``billing_address`` and ``basket_items`` (at least one,
+    the ``price`` values add up to ``amount``); ``shipping_address`` when an
+    item is ``PHYSICAL``. ``create_intent()`` raises
+    :class:`~lunixi.errors.ConfigurationError` naming the missing paths.
     """
 
     amount: str
@@ -252,6 +279,10 @@ class CreateIntent:
     locale: str = "en"
     metadata: Mapping[str, Any] = field(default_factory=dict, repr=False)
     enabled_installments: Optional[list[int]] = None
+    buyer: Optional[Mapping[str, Any]] = field(default=None, repr=False)
+    billing_address: Optional[Mapping[str, Any]] = field(default=None, repr=False)
+    shipping_address: Optional[Mapping[str, Any]] = field(default=None, repr=False)
+    basket_items: Sequence[Mapping[str, Any]] = field(default=(), repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         amount_minor(self.amount)
@@ -286,6 +317,14 @@ class CreateIntent:
             body["callbackUrl"] = self.callback_url
         if self.enabled_installments is not None:
             body["enabledInstallments"] = validate_enabled_installments(self.enabled_installments)
+        if self.buyer is not None:
+            body["buyer"] = dict(self.buyer)
+        if self.billing_address is not None:
+            body["billingAddress"] = dict(self.billing_address)
+        if self.shipping_address is not None:
+            body["shippingAddress"] = dict(self.shipping_address)
+        if self.basket_items:
+            body["basketItems"] = [dict(item) for item in self.basket_items]
         return body
 
 
@@ -348,11 +387,13 @@ class PaymentsClient:
         self._api = api
 
     def create_intent(self, request: CreateIntent, *, idempotency_key: str) -> IntentResult:
+        body = request.to_dict()
+        assert_order_details(body, "A payment intent", checkout_intent=True)
         return IntentResult.from_response(
             self._api.request(
                 "POST",
                 _BASE + "/intents",
-                request.to_dict(),
+                body,
                 step_up=True,
                 idempotency_key=_key(idempotency_key),
             )
@@ -388,6 +429,7 @@ class PaymentsClient:
                 "create_marketplace_intent takes a CreateIntent or a body mapping."
             )
         body = marketplace_intent_body(intent_body, sellers, multi_seller_policy)
+        assert_order_details(body, "A marketplace payment intent", checkout_intent=True)
         return self._api.request(
             "POST",
             _BASE + "/marketplace/intents",
@@ -709,10 +751,12 @@ class PaymentsClient:
         """
         if not isinstance(request, StoreCardRequest):
             raise ConfigurationError("store_card takes a StoreCardRequest.")
+        body = request.to_dict()
+        assert_order_details(body, "Storing a card", basket=False)
         return self._api.request(
             "POST",
             _BASE + "/cards",
-            request.to_dict(),
+            body,
             step_up=True,
             idempotency_key=_required_key(idempotency_key, "store card"),
         )

@@ -13,6 +13,7 @@ from django.test import Client
 from integrations.django_app.shop import views
 from integrations.django_app.shop.models import Event, Order, Outbox, Stock
 from integrations.django_app.shop.service import DjangoOrders
+from tests.support.order_details import order_details
 from tests.test_commerce import fresh_event
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -30,7 +31,9 @@ def native(payment_setup, monkeypatch):
         username="other", password="synthetic-password-used-only-in-tests"
     )
     stock = Stock.objects.create(sku="sample", quantity=10)
-    order = Order.objects.create(owner=user, stock=stock, amount="1990", currency="TRY")
+    order = Order.objects.create(
+        owner=user, stock=stock, amount="1990", currency="TRY", order_details=order_details("1990")
+    )
     client = Client(enforce_csrf_checks=True)
     return orders, gateway, user, other, order, client
 

@@ -6,6 +6,7 @@ from integrations.common import Settings
 from lunixi.commerce import CommerceError
 from lunixi.errors import ApiError
 from lunixi.payments import IntentResult
+from tests.support.order_details import order_details
 
 PAGE = "https://pay.lunixi.com/payment/server-issued-page-0123456789"
 
@@ -61,7 +62,7 @@ def test_missing_backend_url_keeps_embedded_usable_but_never_builds_a_redirect()
 def test_hosted_backend_url_is_encrypted_reused_and_mode_stays_frozen(payment_setup):
     orders, gateway = payment_setup
     orders.settings = replace(orders.settings, mode="hosted")
-    key, _ = orders.seed("owner")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
     assert orders.start(key, "owner") == {"redirect": PAGE}
     record = orders.service._load(key)
     assert PAGE not in record["paymentPageUrl"]
@@ -80,7 +81,7 @@ def test_hosted_backend_url_is_encrypted_reused_and_mode_stays_frozen(payment_se
 def test_legacy_missing_url_does_not_replace_a_hosted_attempt(payment_setup):
     orders, gateway = payment_setup
     orders.settings = replace(orders.settings, mode="hosted")
-    key, _ = orders.seed("owner")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
     orders.start(key, "owner")
     with orders.store.transaction(key) as tx:
         record = tx.load()
@@ -96,7 +97,7 @@ def test_legacy_missing_url_does_not_replace_a_hosted_attempt(payment_setup):
 def test_new_framework_settings_default_to_embedded(payment_setup):
     orders, gateway = payment_setup
     assert Settings.__dataclass_fields__["mode"].default == "embedded"
-    key, _ = orders.seed("owner")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
     result = orders.start(key, "owner")
     assert result["config"]["target"] == "lunixi-checkout-form"
     assert "redirect" not in result

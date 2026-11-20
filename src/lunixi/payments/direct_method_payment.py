@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from ..errors import ConfigurationError
 from ..validation import amount_minor, currency_code, validate_money_fields
+from .order_details import assert_order_details
 from .payment_method_values import (
     CARD_ONLY_FIELDS,
     DIRECT_METHOD_PAYMENT_FIELDS,
@@ -310,7 +311,9 @@ def assert_direct_method_payment_payload(payload: Any) -> None:
     fields only with ``CARD``; exactly the chosen method's block (``card`` for
     a card) and no other; the block's shape; the promissory-note plan; the
     shopping-loan basket (1–100 items); no ``providerCode`` in a
-    ``bankTransfer`` block; ``preauth`` and ``force3D`` booleans.
+    ``bankTransfer`` block; ``preauth`` and ``force3D`` booleans; the order
+    details (``buyer``, ``billingAddress``, ``basketItems``, ``shippingAddress``
+    for a ``PHYSICAL`` item; :mod:`lunixi.payments.order_details`).
     """
     if not isinstance(payload, Mapping):
         raise ConfigurationError(
@@ -371,3 +374,4 @@ def assert_direct_method_payment_payload(payload: Any) -> None:
     installment = payload.get("installment")
     if installment is not None:
         _installment(installment)
+    assert_order_details(payload, "A direct method payment")

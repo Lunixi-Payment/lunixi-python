@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass
-from typing import Any, Mapping, Optional
+from dataclasses import asdict, dataclass, field
+from typing import Any, Mapping, Optional, Sequence
 
 from ..errors import ConfigurationError, LunixiError
 from ..validation import amount_minor, currency_code
@@ -29,10 +29,23 @@ def minor_units(decimal: str, currency: str) -> str:
 
 @dataclass(frozen=True)
 class OrderSnapshot:
+    """The order a checkout pays.
+
+    ``buyer``, ``billing_address``, ``shipping_address`` (for a ``PHYSICAL``
+    item) and ``basket_items`` are the order details every payment requires
+    (:mod:`lunixi.payments.order_details`); :meth:`CheckoutService.start`
+    sends them with the intent. They are not part of :attr:`fingerprint`,
+    ``to_dict()`` or the stored snapshot, and are never shown by ``repr``.
+    """
+
     merchant_id: str
     order_id: str
     amount: str
     currency: str
+    buyer: Optional[Mapping[str, Any]] = field(default=None, repr=False, compare=False)
+    billing_address: Optional[Mapping[str, Any]] = field(default=None, repr=False, compare=False)
+    shipping_address: Optional[Mapping[str, Any]] = field(default=None, repr=False, compare=False)
+    basket_items: Sequence[Mapping[str, Any]] = field(default=(), repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if (

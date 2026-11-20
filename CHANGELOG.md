@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0 — 2026-11-20
+
+- **Breaking — order details required.** Every payment endpoint requires the buyer, the billing address and at least one basket item; a `PHYSICAL` item also requires the shipping address (payment providers do not start a payment without them). `CreateIntent` gains `buyer`, `billing_address`, `shipping_address` and `basket_items`; `SplitPaymentRequest` and `StoreCardRequest` gain `with_buyer()` / `with_billing_address()` (split also `with_shipping_address()` / `with_basket_items()`). `create_intent()`, `create_marketplace_intent()`, `direct_method_payment()`, `create_split_payment()`, marketplace `create_checkout_intent()` / card charges and `store_card()` (buyer and billing address only) raise `ConfigurationError` naming the missing paths before sending; on the checkout intents `buyer.ip` may be left out (the Lunixi form takes it from the browser). New module `lunixi.payments.order_details`: `ORDER_DETAILS_REQUIRED_FIELDS`, `BUYER_REQUIRED_FIELDS`, `CHECKOUT_INTENT_BUYER_OPTIONAL_FIELDS`, `ADDRESS_REQUIRED_FIELDS`, `BASKET_ITEM_REQUIRED_FIELDS`, `OrderFieldErrorCode`, `OrderFieldReason`, `missing_order_details()`, `assert_order_details()`.
+- Wallet card top-up (`wallet().topups.start_card`): `buyer` and `billingAddress` are required, `shippingAddress` optional.
+- **Breaking — subscription customers.** `customers.upsert` requires `name`, `surname`, `email`, `gsmNumber`, `identityNumber`, `billingAddress`, `billingCity`, `billingCountry`, `billingZipCode` (renewals take the buyer from this record); `phone`, `locale` and `metadata` were never accepted by the gateway and are removed from the route. New constant `SubscriptionCustomerErrorCode`.
+- **Breaking — payment link buyer fields.** `BuyerFieldRequirement` has only `REQUIRED`: the link page always asks all five buyer fields (the gateway answers `HIDDEN` / `OPTIONAL` with 400).
+- Commerce: `OrderSnapshot` carries `buyer`, `billing_address`, `shipping_address` and `basket_items` outside its fingerprint; `CheckoutService.start()` sends them and refuses an incomplete order before reserving an attempt. The sample integrations store the order details with the order (`seed(..., order_details=...)`, CLI `--order-details`, Django `Order.order_details` with migration `0002`).
+
 ## 1.5.1 — 2026-11-15
 
 - Formatting (`ruff format`) and type annotations (`mypy`) of the 1.5.0 sources; no behaviour change.

@@ -140,6 +140,7 @@ class StoreCardRequest:
     ``expireMonth``, ``expireYear``, ``cvcNumber``) collected under your own
     PCI scope; ``card_user_key`` groups the buyer's stored cards and
     ``callback_url`` is where the buyer returns after the bank's verification.
+    ``with_buyer()`` and ``with_billing_address()`` are required (no basket).
     The card is never shown by ``repr``.
     """
 
@@ -158,6 +159,16 @@ class StoreCardRequest:
 
     def with_currency(self, value: str) -> StoreCardRequest:
         self._payload["currency"] = currency_code(value)
+        return self
+
+    def with_buyer(self, value: Mapping[str, Any]) -> StoreCardRequest:
+        """The card holder as the buyer (required; :mod:`lunixi.payments.order_details`)."""
+        self._payload["buyer"] = dict(value)
+        return self
+
+    def with_billing_address(self, value: Mapping[str, Any]) -> StoreCardRequest:
+        """The billing address (required)."""
+        self._payload["billingAddress"] = dict(value)
         return self
 
     def to_dict(self) -> Dict[str, Any]:

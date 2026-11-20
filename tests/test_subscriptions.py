@@ -260,12 +260,26 @@ def test_customers_upsert_lookup_and_credit(client_factory):
     answer = ok({"id": "cus_1", "externalId": "u-42"})
     transport, client = client_factory(answer, answer, answer)
     customers = client.subscriptions().customers
-    customers.upsert(external_id="u-42", email="ada@example.com", idempotency_key="idem-cus-1")
+    customers.upsert(
+        external_id="u-42",
+        name="Ada",
+        surname="Yilmaz",
+        email="ada@example.com",
+        gsm_number="+905350000000",
+        identity_number="11111111111",
+        billing_address="Example Street 1",
+        billing_city="Istanbul",
+        billing_country="Turkey",
+        billing_zip_code="34000",
+        idempotency_key="idem-cus-1",
+    )
     customers.get_by_external_id("u-42")
     customers.adjust_credit("cus_1", amount_minor="500", currency="TRY", type="GRANT")
     upsert, lookup, credit = transport.requests[1:]
     assert (upsert.method, path_of(upsert)) == ("PUT", "/api/v1/subscriptions/customers")
     assert upsert.header("Idempotency-Key") == "idem-cus-1"
+    with pytest.raises(ConfigurationError, match="surname"):
+        customers.upsert(external_id="u-43", name="Ada", email="ada@example.com")
     assert path_of(lookup) == "/api/v1/subscriptions/customers/by-external/u-42"
     assert path_of(credit) == "/api/v1/subscriptions/customers/cus_1/credit-balance/adjust"
     assert body_of(credit) == {"amountMinor": "500", "currency": "TRY", "type": "GRANT"}

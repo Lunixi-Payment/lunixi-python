@@ -47,6 +47,7 @@ from lunixi.payments import (
     normalize_payment_method,
 )
 
+from .support.order_details import order_details, with_order_details
 from .support.recording_transport import envelope, error_envelope, json_response
 
 EXCEPTION_ID = "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b"
@@ -71,9 +72,9 @@ def query_of(request):
 
 
 def bank_transfer_request():
-    return DirectMethodPaymentRequest("15000", "TRY", "order-1").with_method_fields(
-        PaymentMethod.BANK_TRANSFER, None, {"bankCode": "0062"}
-    )
+    return with_order_details(
+        DirectMethodPaymentRequest("15000", "TRY", "order-1"), "15000"
+    ).with_method_fields(PaymentMethod.BANK_TRANSFER, None, {"bankCode": "0062"})
 
 
 def raw_body(**overrides):
@@ -83,6 +84,7 @@ def raw_body(**overrides):
         "currency": "TRY",
         "orderId": "order-1",
         "mobileBilling": {"providerCode": "provider_a", "gsmNumber": "+905321234567"},
+        **order_details("15000"),
     }
     body.update(overrides)
     return body
@@ -278,6 +280,7 @@ def test_bank_transfer_body_has_the_bank_and_no_provider_code():
         "amount": "15000",
         "currency": "TRY",
         "orderId": "order-1",
+        **order_details("15000"),
         "bankTransfer": {"bankCode": "0062"},
     }
 
@@ -291,9 +294,9 @@ def test_bank_transfer_is_sent_signed_with_the_idempotency_key(client_factory, t
     request = transport.last
     assert request.method == "POST"
     assert request.path == "/api/v1/payments/direct/payment"
-    assert request.body == (
-        '{"paymentMethod":"BANK_TRANSFER","amount":"15000","currency":"TRY",'
-        '"orderId":"order-1","bankTransfer":{"bankCode":"0062"}}'
+    assert json.loads(request.body) == bank_transfer_request().to_dict()
+    assert request.body.startswith(
+        '{"paymentMethod":"BANK_TRANSFER","amount":"15000","currency":"TRY","orderId":"order-1",'
     )
     assert "providerCode" not in request.body
     assert request.header("Idempotency-Key") == "order-1-a1"
@@ -302,7 +305,7 @@ def test_bank_transfer_is_sent_signed_with_the_idempotency_key(client_factory, t
 
 def test_other_banks_option_is_a_bank_code():
     body = (
-        DirectMethodPaymentRequest("15000", "TRY", "order-1")
+        with_order_details(DirectMethodPaymentRequest("15000", "TRY", "order-1"), "15000")
         .with_method_fields("BANK_TRANSFER", None, {"bankCode": BANK_TRANSFER_OTHER_BANKS_CODE})
         .to_dict()
     )
@@ -311,9 +314,9 @@ def test_other_banks_option_is_a_bank_code():
 
 def test_bank_transfer_with_a_provider_code_is_refused_by_the_builder():
     with pytest.raises(ConfigurationError, match="BANK_TRANSFER"):
-        DirectMethodPaymentRequest("15000", "TRY", "order-1").with_method_fields(
-            "BANK_TRANSFER", "provider_a", {"bankCode": "0062"}
-        )
+        with_order_details(
+            DirectMethodPaymentRequest("15000", "TRY", "order-1"), "15000"
+        ).with_method_fields("BANK_TRANSFER", "provider_a", {"bankCode": "0062"})
 
 
 def test_bank_transfer_with_a_provider_code_is_refused_in_a_raw_body(client_factory):
@@ -370,7 +373,7 @@ def test_the_idempotency_key_is_required(client_factory, key):
 
 def test_card_fields_are_refused_on_another_method_in_the_builder():
     request = (
-        DirectMethodPaymentRequest("15000", "TRY", "order-1")
+        with_order_details(DirectMethodPaymentRequest("15000", "TRY", "order-1"), "15000")
         .with_method_fields("WALLET", "provider_b", {})
         .with_installment(3)
     )
@@ -380,7 +383,7 @@ def test_card_fields_are_refused_on_another_method_in_the_builder():
 
 def test_card_payment_carries_card_fields():
     body = (
-        DirectMethodPaymentRequest("15000", "TRY", "order-1")
+        with_order_details(DirectMethodPaymentRequest("15000", "TRY", "order-1"), "15000")
         .with_card({"cardUserKey": "cuk_1", "cardToken": "ct_1"})
         .with_force3d(True)
         .with_installment(3, "quote-token")
@@ -395,7 +398,7 @@ def test_card_payment_carries_card_fields():
 
 
 def test_card_through_with_method_fields_and_a_method_without_block_are_refused():
-    request = DirectMethodPaymentRequest("15000", "TRY", "order-1")
+    request = with_order_details(DirectMethodPaymentRequest("15000", "TRY", "order-1"), "15000")
     with pytest.raises(ConfigurationError, match="with_card"):
         request.with_method_fields("CARD", None, {})
     with pytest.raises(ConfigurationError, match="GIFT_CARD"):
@@ -407,7 +410,7 @@ def test_card_through_with_method_fields_and_a_method_without_block_are_refused(
 @pytest.mark.parametrize("count", [0, 101])
 def test_shopping_loan_basket_must_have_1_to_100_items(count):
     request = (
-        DirectMethodPaymentRequest("15000", "TRY", "order-1")
+        with_order_details(DirectMethodPaymentRequest("15000", "TRY", "order-1"), "15000")
         .with_method_fields("SHOPPING_LOAN", "provider_c", {"bankCode": "0062"})
         .with_basket_items([{"id": f"sku-{i}", "name": "Phone"} for i in range(count)])
     )
@@ -427,9 +430,9 @@ def test_shopping_loan_without_basket_is_refused():
 
 
 def promissory_request(amount="30000"):
-    return DirectMethodPaymentRequest(amount, "TRY", "order-1").with_method_fields(
-        PaymentMethod.PROMISSORY_NOTE, "provider_d", {"debtorTckn": "10000000146"}
-    )
+    return with_order_details(
+        DirectMethodPaymentRequest(amount, "TRY", "order-1"), amount
+    ).with_method_fields(PaymentMethod.PROMISSORY_NOTE, "provider_d", {"debtorTckn": "10000000146"})
 
 
 def test_a_valid_schedule_is_sent_in_the_block():
@@ -503,16 +506,16 @@ def test_schedule_and_note_count_together_are_refused_in_a_raw_body(client_facto
 def test_a_plan_is_required_and_given_once():
     with pytest.raises(ConfigurationError, match="plan"):
         promissory_request().to_dict()
-    request = DirectMethodPaymentRequest("30000", "TRY", "order-1").with_method_fields(
-        "PROMISSORY_NOTE", "provider_d", {"noteCount": 3}
-    )
+    request = with_order_details(
+        DirectMethodPaymentRequest("30000", "TRY", "order-1"), "30000"
+    ).with_method_fields("PROMISSORY_NOTE", "provider_d", {"noteCount": 3})
     assert request.to_dict()["promissoryNote"]["noteCount"] == "3"
     with pytest.raises(ConfigurationError, match="twice"):
         request.with_promissory_note_count(2).to_dict()
     with pytest.raises(ConfigurationError, match="with_promissory_note_schedule"):
-        DirectMethodPaymentRequest("30000", "TRY", "order-1").with_method_fields(
-            "PROMISSORY_NOTE", "provider_d", {"schedule": []}
-        )
+        with_order_details(
+            DirectMethodPaymentRequest("30000", "TRY", "order-1"), "30000"
+        ).with_method_fields("PROMISSORY_NOTE", "provider_d", {"schedule": []})
 
 
 @pytest.mark.parametrize("count", [0, 25, "07", "x", True, 2.0])
@@ -544,9 +547,9 @@ def test_an_invalid_note_count_is_refused(count):
 )
 def test_a_block_with_a_broken_shape_is_refused(fields):
     with pytest.raises(ConfigurationError):
-        DirectMethodPaymentRequest("15000", "TRY", "order-1").with_method_fields(
-            "MOBILE_BILLING", "provider_a", fields
-        )
+        with_order_details(
+            DirectMethodPaymentRequest("15000", "TRY", "order-1"), "15000"
+        ).with_method_fields("MOBILE_BILLING", "provider_a", fields)
 
 
 def test_a_block_with_a_broken_shape_is_refused_in_a_raw_body(client_factory):
@@ -576,7 +579,7 @@ def test_address_and_group_values_are_accepted():
         "count": 2,
     }
     body = (
-        DirectMethodPaymentRequest("15000", "TRY", "order-1")
+        with_order_details(DirectMethodPaymentRequest("15000", "TRY", "order-1"), "15000")
         .with_method_fields("MOBILE_BILLING", "provider_a", fields)
         .to_dict()
     )
@@ -875,7 +878,7 @@ def test_a_non_uuid_exception_id_is_refused(client_factory, exception_id):
 
 def split_request():
     return (
-        SplitPaymentRequest("30000", "TRY", "customer-42")
+        with_order_details(SplitPaymentRequest("30000", "TRY", "customer-42"), "30000")
         .with_order_id("order-1")
         .add_card_leg("card_token_1", "20000")
         .add_method_leg("WALLET", "provider_b", "10000", {})
@@ -896,6 +899,7 @@ def test_split_payment_is_sent_signed_with_the_key(client_factory, test_key_pair
         "currency": "TRY",
         "ownerRef": "customer-42",
         "orderId": "order-1",
+        **order_details("30000"),
         "legs": [
             {"cardToken": "card_token_1", "amount": "20000"},
             {

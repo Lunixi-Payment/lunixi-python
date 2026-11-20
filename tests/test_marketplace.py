@@ -19,6 +19,7 @@ from lunixi.marketplace import (
 )
 from lunixi.payments import CreateIntent
 
+from .support.order_details import BILLING_ADDRESS, BUYER, intent_details, order_details
 from .support.recording_transport import envelope, json_response
 from .support.wire import assert_signed, assert_unsigned, body_of, path_of
 
@@ -53,8 +54,9 @@ def charge_request(amount="100000"):
             "expireYear": "28",
             "cvcNumber": CVC,
         },
-        "buyer": {"name": "Ada", "surname": "Yilmaz"},
-        "billingAddress": {"city": "Istanbul"},
+        "buyer": dict(BUYER),
+        "billingAddress": dict(BILLING_ADDRESS),
+        "shippingAddress": dict(BILLING_ADDRESS),
         "basketItems": [
             {
                 "id": "SKU-1",
@@ -82,7 +84,7 @@ def test_create_checkout_intent_sends_the_split_signed_with_the_key(client_facto
     answer = ok({"paymentId": "pi_1", "token": "tok_1", "checkoutFormContent": "<script>"})
     transport, client = client_factory(answer)
     intent = client.marketplace().create_checkout_intent(
-        CreateIntent("100000", "TRY", "WC-7"),
+        CreateIntent("100000", "TRY", "WC-7", **intent_details("100000")),
         legs(),
         MarketplaceMultiSellerPolicy.ALL_OR_NOTHING,
         idempotency_key="idem-mp-1",
@@ -103,7 +105,7 @@ def test_create_checkout_intent_raises_when_the_answer_has_no_token(client_facto
     _, client = client_factory(ok({}, code="marketplace.payment.seller_not_eligible"))
     with pytest.raises(ApiError) as raised:
         client.marketplace().create_checkout_intent(
-            {"amount": "1000", "currency": "TRY", "orderId": "o1"},
+            {"amount": "1000", "currency": "TRY", "orderId": "o1", **order_details("1000")},
             [{"subDealerId": "d_1", "amountMinor": "1000"}],
         )
     assert raised.value.code == "marketplace.payment.seller_not_eligible"
@@ -123,7 +125,7 @@ def test_create_checkout_intent_raises_when_the_answer_has_no_token(client_facto
 )
 def test_seller_legs_are_checked_before_sending(client_factory, sellers, policy, message):
     transport, client = client_factory()
-    intent = CreateIntent("1000", "TRY", "o1")
+    intent = CreateIntent("1000", "TRY", "o1", **intent_details("1000"))
     with pytest.raises(ConfigurationError, match=message):
         client.marketplace().create_checkout_intent(intent, sellers, policy)
     assert transport.requests == []

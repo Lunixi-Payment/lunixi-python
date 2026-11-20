@@ -18,6 +18,11 @@ def main() -> None:
     seed.add_argument("--customer-id", required=True)
     seed.add_argument("--amount", default="19.90")
     seed.add_argument("--currency", default="TRY")
+    seed.add_argument(
+        "--order-details",
+        required=True,
+        help="JSON file with the customer's buyer, billingAddress, basketItems (and shippingAddress for shipped goods); every payment requires them",
+    )
     reconcile = sub.add_parser("reconcile")
     reconcile.add_argument("--limit", type=int, default=100)
     operation = sub.add_parser("operation")
@@ -32,8 +37,13 @@ def main() -> None:
         orders.install()
         print("initialized")
     elif args.command == "seed":
+        with open(args.order_details, encoding="utf-8") as handle:
+            details = json.load(handle)
         key, token = orders.seed(
-            args.customer_id, minor_units(args.amount, args.currency), args.currency
+            args.customer_id,
+            minor_units(args.amount, args.currency),
+            args.currency,
+            order_details=details,
         )
         print(settings.public_origin + "/claim/" + token)
     elif args.command == "reconcile":

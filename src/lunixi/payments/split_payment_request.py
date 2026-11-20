@@ -26,6 +26,9 @@ class SplitPaymentRequest:
         request = (
             SplitPaymentRequest("30000", "TRY", "customer-42")
             .with_order_id("order-1001")
+            .with_buyer(buyer)
+            .with_billing_address(billing_address)
+            .with_basket_items(basket_items)
             .add_card_leg(stored_card_token, "20000")
             .add_method_leg(PaymentMethod.WALLET, provider_code, "10000", {})
         )
@@ -46,6 +49,28 @@ class SplitPaymentRequest:
 
     def with_order_id(self, value: str) -> SplitPaymentRequest:
         self._payload["orderId"] = value
+        return self
+
+    def with_buyer(self, value: Mapping[str, Any]) -> SplitPaymentRequest:
+        """The buyer (required). Every leg goes to the payment provider with it."""
+        self._payload["buyer"] = dict(value)
+        return self
+
+    def with_billing_address(self, value: Mapping[str, Any]) -> SplitPaymentRequest:
+        """The billing address (required)."""
+        self._payload["billingAddress"] = dict(value)
+        return self
+
+    def with_shipping_address(self, value: Mapping[str, Any]) -> SplitPaymentRequest:
+        """The shipping address; required when a basket item is ``PHYSICAL``."""
+        self._payload["shippingAddress"] = dict(value)
+        return self
+
+    def with_basket_items(self, items: List[Mapping[str, Any]]) -> SplitPaymentRequest:
+        """Basket items (at least one); their ``price`` values add up to ``total_amount``."""
+        if not isinstance(items, (list, tuple)):
+            raise ConfigurationError("basket_items must be a list.")
+        self._payload["basketItems"] = [dict(item) for item in items]
         return self
 
     def with_callback_url(self, value: str) -> SplitPaymentRequest:

@@ -12,6 +12,7 @@ from lunixi.auth.canonical_request import build_canonical_request
 from lunixi.auth.ed25519_signer import verify_signature
 from lunixi.errors import ConfigurationError
 
+from .support.order_details import BILLING_ADDRESS, BUYER, intent_details, order_details
 from .support.recording_transport import envelope, json_response
 
 PAN = "5400000000000004"
@@ -53,7 +54,11 @@ def card():
 
 
 def store_card_request():
-    return StoreCardRequest(card(), "cuk_123", "https://shop.example/cards/return")
+    return (
+        StoreCardRequest(card(), "cuk_123", "https://shop.example/cards/return")
+        .with_buyer(dict(BUYER))
+        .with_billing_address(dict(BILLING_ADDRESS))
+    )
 
 
 # ── BIN info ─────────────────────────────────────────────────────────────────
@@ -167,6 +172,8 @@ def test_store_card_is_signed_with_the_key(client_factory, test_key_pair):
         "card": card(),
         "cardUserKey": "cuk_123",
         "callbackUrl": "https://shop.example/cards/return",
+        "buyer": BUYER,
+        "billingAddress": BILLING_ADDRESS,
         "currency": "TRY",
     }
     assert request.header("Idempotency-Key") == "card-1"
@@ -275,7 +282,7 @@ def test_marketplace_intent_is_signed_with_sellers_and_policy(client_factory, te
     _, public_key = test_key_pair
     transport, client = client_factory(json_response(envelope({"token": "t", "paymentId": "p"})))
     client.payments().create_marketplace_intent(
-        CreateIntent("10050", "TRY", "order-1"),
+        CreateIntent("10050", "TRY", "order-1", **intent_details("10050")),
         sellers=sellers("6000", "4050"),
         multi_seller_policy=MultiSellerPolicy.ALL_OR_NOTHING,
         idempotency_key="mp-1",
@@ -297,6 +304,7 @@ def test_a_raw_marketplace_body_is_sent_as_given(client_factory):
         "amount": "1000",
         "currency": "TRY",
         "orderId": "order-1",
+        **order_details("1000"),
         "sellers": [{"subDealerId": "d_1", "amountMinor": "1000", "scenario": {"code": "std"}}],
     }
     client.payments().create_marketplace_intent(body)
@@ -324,7 +332,7 @@ def test_marketplace_seller_totals_and_shape_are_checked(client_factory, seller_
     transport, client = client_factory()
     with pytest.raises(ConfigurationError):
         client.payments().create_marketplace_intent(
-            CreateIntent("10050", "TRY", "order-1"), sellers=seller_rows
+            CreateIntent("10050", "TRY", "order-1", **intent_details("10050")), sellers=seller_rows
         )
     assert transport.requests == []
 
@@ -333,7 +341,8 @@ def test_a_marketplace_total_mismatch_names_both_totals(client_factory):
     _, client = client_factory()
     with pytest.raises(ConfigurationError, match="10000.*10050"):
         client.payments().create_marketplace_intent(
-            CreateIntent("10050", "TRY", "order-1"), sellers=sellers("6000", "4000")
+            CreateIntent("10050", "TRY", "order-1", **intent_details("10050")),
+            sellers=sellers("6000", "4000"),
         )
 
 

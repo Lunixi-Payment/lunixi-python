@@ -39,6 +39,7 @@ from .._routes import (
 from ..api_client import ApiClient
 from ..errors import ApiError, ConfigurationError
 from ..http.envelope import Page
+from ..payments.order_details import assert_order_details
 from ..validation import amount_minor, validate_money_fields
 from .values import (
     MARKETPLACE_CHARGE_REQUIRED_FIELDS,
@@ -90,6 +91,7 @@ class MarketplaceClient:
         body = _split_body(
             _wire_body(request, "createCheckoutIntent request"), sellers, multi_seller_policy
         )
+        assert_order_details(body, "A marketplace payment intent", checkout_intent=True)
         response = _call(
             self._api, "createCheckoutIntent", body=body, idempotency_key=idempotency_key
         )
@@ -120,6 +122,7 @@ class MarketplaceClient:
         """
         body = _wire_body(payload, "chargeMarketplaceCard payload")
         _assert_charge_amount(body)
+        assert_order_details(body, "A marketplace card charge")
         name = "chargeMarketplaceCard3d" if three_ds else "chargeMarketplaceCard2d"
         return _call(self._api, name, body=body, idempotency_key=idempotency_key)
 

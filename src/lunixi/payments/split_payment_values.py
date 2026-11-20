@@ -19,6 +19,7 @@ from typing import Any, Dict, Mapping, Set, Tuple
 
 from ..errors import ConfigurationError
 from ..validation import amount_minor
+from .order_details import assert_order_details
 from .payment_method_values import (
     PaymentMethod,
     block_name_of,
@@ -156,6 +157,10 @@ SPLIT_PAYMENT_FIELDS: Tuple[str, ...] = (
     "orderId",
     "ownerScope",
     "callbackUrl",
+    "buyer",
+    "billingAddress",
+    "shippingAddress",
+    "basketItems",
 )
 
 #: Method blocks a non-card leg can carry. Meal card, open banking, shopping
@@ -303,7 +308,8 @@ def assert_split_payment_payload(body: Any) -> None:
     ``totalAmount``, a card leg with ``cardToken`` and no method block, a
     non-card leg with exactly its own block (``mobileBilling``, ``wallet`` or
     ``promissoryNote``, with ``providerCode``) and no card fields, one leg per
-    provider and per card, ``callbackUrl`` when a card leg uses 3D Secure.
+    provider and per card, ``callbackUrl`` when a card leg uses 3D Secure, the
+    order details (:mod:`lunixi.payments.order_details`).
     """
     if not isinstance(body, Mapping):
         raise ConfigurationError(
@@ -373,6 +379,7 @@ def assert_split_payment_payload(body: Any) -> None:
         raise ConfigurationError(
             "callbackUrl is required when a card leg uses 3D Secure (force3D: true)."
         )
+    assert_order_details(body, "A split payment")
 
 
 def _filter_values(value: Any, field: str) -> list:

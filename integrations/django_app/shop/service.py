@@ -9,7 +9,7 @@ from functools import lru_cache
 
 from django.db.models import F
 
-from integrations.common import Settings, sdk_from_env
+from integrations.common import Settings, order_snapshot, sdk_from_env
 from lunixi import LunixiClient
 from lunixi.commerce import (
     CheckoutService,
@@ -40,7 +40,9 @@ class DjangoOrders:
 
     def start(self, key: str, user):
         order = self.owned(key, user)
-        snapshot = OrderSnapshot(self.settings.merchant_id, key, str(order.amount), order.currency)
+        snapshot = order_snapshot(
+            self.settings.merchant_id, key, str(order.amount), order.currency, order.order_details
+        )
         result = self.service.start(
             key,
             snapshot,

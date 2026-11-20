@@ -19,6 +19,7 @@ from lunixi.commerce import (
     minor_units,
 )
 from lunixi.http.transport import serialize_body
+from tests.support.order_details import order_details, snapshot_details
 
 
 def fresh_event(
@@ -75,7 +76,7 @@ def test_exact_decimal_and_currency():
 
 def test_signed_replay_collision_native_rollback_and_encrypted_token(payment_setup):
     orders, gateway = payment_setup
-    key, _ = orders.seed("customer")
+    key, _ = orders.seed("customer", order_details=order_details("1990"))
     orders.start(key, "customer")
     payment_id = next(iter(gateway.payments))
     gateway.capture(payment_id)
@@ -110,7 +111,7 @@ def test_signed_replay_collision_native_rollback_and_encrypted_token(payment_set
 
 def test_concurrent_store_instances_apply_once(payment_setup):
     orders, gateway = payment_setup
-    key, _ = orders.seed("customer")
+    key, _ = orders.seed("customer", order_details=order_details("1990"))
     orders.start(key, "customer")
     payment_id = next(iter(gateway.payments))
     gateway.capture(payment_id)
@@ -130,7 +131,7 @@ def test_concurrent_store_instances_apply_once(payment_setup):
 
 def test_ownership_tamper_and_changed_snapshot(payment_setup):
     orders, gateway = payment_setup
-    key, _ = orders.seed("owner")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
     with pytest.raises(CommerceError):
         orders.start(key, "other")
     assert gateway.calls == []
@@ -151,7 +152,7 @@ def test_ownership_tamper_and_changed_snapshot(payment_setup):
 
 def test_lost_response_signed_recovery_and_no_rebinding(payment_setup):
     orders, gateway = payment_setup
-    key, _ = orders.seed("owner")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
     gateway.lost_create = True
     with pytest.raises(ApiError):
         orders.start(key, "owner")
@@ -169,8 +170,8 @@ def test_lost_response_signed_recovery_and_no_rebinding(payment_setup):
 
 def test_mutation_delayed_confirmation_partial_refund_and_void(payment_setup):
     orders, gateway = payment_setup
-    key, _ = orders.seed("owner")
-    snapshot = OrderSnapshot("merchant_test", key, "1990", "TRY")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
+    snapshot = OrderSnapshot("merchant_test", key, "1990", "TRY", **snapshot_details("1990"))
     intent = orders.service.start(key, snapshot, "https://testserver/return/" + key, preauth=True)
     assert orders.service.reconcile(key, orders.apply).state == "authorized"
     gateway.defer = True
@@ -199,7 +200,7 @@ def test_mutation_delayed_confirmation_partial_refund_and_void(payment_setup):
 
 def test_age_fence_prevents_new_charge_after_gateway_key_retention(payment_setup):
     orders, gateway = payment_setup
-    key, _ = orders.seed("owner")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
     gateway.lost_create = True
     with pytest.raises(ApiError):
         orders.start(key, "owner")
@@ -212,7 +213,7 @@ def test_age_fence_prevents_new_charge_after_gateway_key_retention(payment_setup
 
 def test_failed_without_certainty_is_review_and_does_not_complete(payment_setup):
     orders, gateway = payment_setup
-    key, _ = orders.seed("owner")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
     orders.start(key, "owner")
     payment_id = next(iter(gateway.payments))
     gateway.payments[payment_id]["data"]["status"] = "FAILED"
@@ -221,7 +222,7 @@ def test_failed_without_certainty_is_review_and_does_not_complete(payment_setup)
 
 
 def test_fee_and_split_parent_require_complete_balanced_evidence():
-    order = OrderSnapshot("merchant_test", "order", "1990", "TRY")
+    order = OrderSnapshot("merchant_test", "order", "1990", "TRY", **snapshot_details("1990"))
     p = {
         "id": "pi_parent",
         "merchantId": "merchant_test",
@@ -273,10 +274,10 @@ def test_fee_and_split_parent_require_complete_balanced_evidence():
 
 def test_void_requires_authenticated_release_and_does_not_fulfill(payment_setup):
     orders, gateway = payment_setup
-    key, _ = orders.seed("owner")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
     result = orders.service.start(
         key,
-        OrderSnapshot("merchant_test", key, "1990", "TRY"),
+        OrderSnapshot("merchant_test", key, "1990", "TRY", **snapshot_details("1990")),
         "https://testserver/return/" + key,
         preauth=True,
     )
@@ -292,10 +293,10 @@ def test_lost_mutation_confirms_by_get_and_expired_unconfirmed_operation_is_not_
     payment_setup,
 ):
     orders, gateway = payment_setup
-    key, _ = orders.seed("owner")
+    key, _ = orders.seed("owner", order_details=order_details("1990"))
     orders.service.start(
         key,
-        OrderSnapshot("merchant_test", key, "1990", "TRY"),
+        OrderSnapshot("merchant_test", key, "1990", "TRY", **snapshot_details("1990")),
         "https://testserver/return/" + key,
         preauth=True,
     )
@@ -314,7 +315,7 @@ def test_lost_mutation_confirms_by_get_and_expired_unconfirmed_operation_is_not_
 
 def test_unicode_customer_identity_uses_persisted_ownership(payment_setup):
     orders, gateway = payment_setup
-    key, token = orders.seed("müşteri_42")
+    key, token = orders.seed("müşteri_42", order_details=order_details("1990"))
     claimed, owner = orders.claim(token)
     assert claimed == key and owner == "müşteri_42"
     assert orders.owned(key, owner)["owner"] == owner

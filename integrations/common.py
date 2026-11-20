@@ -12,7 +12,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 from urllib.parse import urlsplit
 
 from lunixi import LunixiClient
@@ -167,6 +167,23 @@ def sdk_from_env() -> LunixiClient:
     )
 
 
+def order_snapshot(
+    merchant_id: str, key: str, amount: str, currency: str, details: Mapping[str, Any]
+) -> OrderSnapshot:
+    """The order with its stored order details; ``CheckoutService.start()``
+    refuses an incomplete one before reserving an attempt."""
+    return OrderSnapshot(
+        merchant_id,
+        key,
+        amount,
+        currency,
+        buyer=details.get("buyer"),
+        billing_address=details.get("billingAddress"),
+        shipping_address=details.get("shippingAddress"),
+        basket_items=details.get("basketItems") or (),
+    )
+
+
 class Orders:
     """One actual SQLite DB holds orders, stock, attempt, inbox and native outbox."""
 
@@ -183,15 +200,25 @@ class Orders:
         connection = self.store.connect()
         try:
             connection.executescript("""CREATE TABLE IF NOT EXISTS sample_stock(sku TEXT PRIMARY KEY,quantity INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS sample_order(id TEXT PRIMARY KEY,owner TEXT NOT NULL,amount INTEGER NOT NULL,currency TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',captured INTEGER NOT NULL DEFAULT 0,refunded INTEGER NOT NULL DEFAULT 0,stock_applied INTEGER NOT NULL DEFAULT 0,fulfillment_hold INTEGER NOT NULL DEFAULT 0,claim_hash TEXT,claim_expiry INTEGER NOT NULL DEFAULT 0,next_poll INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS sample_order(id TEXT PRIMARY KEY,owner TEXT NOT NULL,amount INTEGER NOT NULL,currency TEXT NOT NULL,order_details TEXT NOT NULL DEFAULT '{}',state TEXT NOT NULL DEFAULT 'pending',captured INTEGER NOT NULL DEFAULT 0,refunded INTEGER NOT NULL DEFAULT 0,stock_applied INTEGER NOT NULL DEFAULT 0,fulfillment_hold INTEGER NOT NULL DEFAULT 0,claim_hash TEXT,claim_expiry INTEGER NOT NULL DEFAULT 0,next_poll INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS sample_outbox(id INTEGER PRIMARY KEY,order_id TEXT NOT NULL,event_hash TEXT NOT NULL UNIQUE,state TEXT NOT NULL DEFAULT 'pending',FOREIGN KEY(order_id) REFERENCES sample_order(id));
 INSERT OR IGNORE INTO sample_stock(sku,quantity) VALUES('sample-product',100);""")
         finally:
             connection.close()
 
     def seed(
-        self, owner: str, amount: str = "1990", currency: str = "TRY", *, hold: bool = False
+        self,
+        owner: str,
+        amount: str = "1990",
+        currency: str = "TRY",
+        *,
+        hold: bool = False,
+        order_details: Optional[Mapping[str, Any]] = None,
     ) -> tuple[str, str]:
+        """Stores an order. ``order_details`` holds the customer's ``buyer``,
+        ``billingAddress``, ``basketItems`` and, for shipped goods,
+        ``shippingAddress`` (``lunixi.payments.order_details``): every payment
+        requires them, so take them from your checkout, never a placeholder."""
         amount_minor(amount)
         currency_code(currency)
         if not isinstance(owner, str) or not 1 <= len(owner) <= 128:
@@ -201,12 +228,13 @@ INSERT OR IGNORE INTO sample_stock(sku,quantity) VALUES('sample-product',100);""
         connection = self.store.connect()
         try:
             connection.execute(
-                "INSERT INTO sample_order(id,owner,amount,currency,fulfillment_hold,claim_hash,claim_expiry) VALUES(?,?,?,?,?,?,?)",
+                "INSERT INTO sample_order(id,owner,amount,currency,order_details,fulfillment_hold,claim_hash,claim_expiry) VALUES(?,?,?,?,?,?,?,?)",
                 (
                     key,
                     owner,
                     amount,
                     currency,
+                    json.dumps(dict(order_details or {})),
                     int(hold),
                     hashlib.sha256(token.encode()).hexdigest(),
                     int(time.time()) + 900,
@@ -255,8 +283,12 @@ INSERT OR IGNORE INTO sample_stock(sku,quantity) VALUES('sample-product',100);""
 
     def start(self, key: str, owner: Any) -> dict[str, Any]:
         row = self.owned(key, owner)
-        snapshot = OrderSnapshot(
-            self.settings.merchant_id, key, str(row["amount"]), row["currency"]
+        snapshot = order_snapshot(
+            self.settings.merchant_id,
+            key,
+            str(row["amount"]),
+            row["currency"],
+            json.loads(row["order_details"]),
         )
         result = self.service.start(
             key,
